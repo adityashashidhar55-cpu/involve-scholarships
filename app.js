@@ -843,8 +843,13 @@
         '<h1 style="margin-top:10px">Loading the directory…</h1></div>';
     }
     var now = NOW;
-    var open = LISTINGS.filter(function (l) { return l.deadline_date && new Date(l.deadline_date) >= now; });
-    var past = LISTINGS.filter(function (l) { return !l.deadline_date || new Date(l.deadline_date) < now; });
+    var open = [], closed = [], undated = [];
+    LISTINGS.forEach(function (l) {
+      if (!l.deadline_date) undated.push(l);
+      else if (new Date(l.deadline_date) >= now) open.push(l);
+      else closed.push(l);
+    });
+    open.sort(function (a, b) { return a.deadline_date < b.deadline_date ? -1 : 1; });
 
     function card(l) {
       var d = l.deadline_date ? daysUntil(l.deadline_date) : null;
@@ -862,20 +867,52 @@
         '</article>';
     }
 
+    // Group the dateless and closed sets by the directory that published them,
+    // so nothing is silently cut off the bottom of a 2,000-item list.
+    function groupBySource(list) {
+      var by = {};
+      list.forEach(function (l) {
+        var k = l.source_name || 'Official directory';
+        (by[k] = by[k] || []).push(l);
+      });
+      return Object.keys(by).sort(function (a, b) { return by[b].length - by[a].length; })
+        .map(function (k) {
+          var items = by[k];
+          var shown = items.slice(0, 250);
+          return '<details style="margin-top:12px"><summary class="label">' + esc(k) + ' — ' + items.length + '</summary>' +
+            '<div style="margin-top:12px">' + shown.map(card).join('') +
+            (items.length > shown.length
+              ? '<p class="null" style="margin-top:12px">Showing the first ' + shown.length + ' of ' + items.length +
+                ' from this directory. Use the official directory link on any card above for the rest.</p>'
+              : '') +
+            '</div></details>';
+        }).join('');
+    }
+
+    var sources = {};
+    LISTINGS.forEach(function (l) { sources[l.source_name || 'Official directory'] = 1; });
+    var sourceCount = Object.keys(sources).length;
+
     return '<div class="wrap section">' +
       '<p class="eyebrow">FUNDING DIRECTORY</p>' +
       '<h1 style="margin-top:10px">' + LISTINGS.length + ' more awards from official directories</h1>' +
-      '<p class="muted" style="margin-top:14px;max-width:64ch">These come from government-run directories such as Campus France. We list what the directory publishes — the name, who runs it, a short description and the closing date — and link you to the official page. <strong>We have not yet gone through their eligibility rules one by one</strong>, which is what separates these from the matched results elsewhere on this site.</p>' +
-      '<div class="grid grid-2" style="margin-top:24px">' +
-        statTile(open.length, 'still open') + statTile(past.length, 'closed or undated') +
+      '<p class="muted" style="margin-top:14px;max-width:64ch">These come from ' + sourceCount +
+      ' government and agency directories — national scholarship portals and official study-abroad services. We list what each directory publishes — the name, who runs it, a short description and the closing date — and link you to the official page. <strong>We have not yet gone through their eligibility rules one by one</strong>, which is what separates these from the matched results elsewhere on this site.</p>' +
+      '<div class="grid grid-3" style="margin-top:24px">' +
+        statTile(open.length, 'closing date still ahead') +
+        statTile(undated.length, 'no closing date published') +
+        statTile(closed.length, 'last published date has passed') +
       '</div>' +
-      '<section class="bucket"><div class="bucket-head b1"><div class="spread"><h2>Still open</h2><p class="data">' + open.length + '</p></div></div>' +
-        (open.length ? open.sort(function (a, b) { return a.deadline_date < b.deadline_date ? -1 : 1; }).map(card).join('') : '<p class="null">Nothing currently open in this set.</p>') +
+      '<section class="bucket"><div class="bucket-head b1"><div class="spread"><h2>Closing date still ahead</h2><p class="data">' + open.length + '</p></div></div>' +
+        (open.length ? open.map(card).join('') : '<p class="null">Nothing in this set has a future date published.</p>') +
       '</section>' +
-      '<section class="bucket"><div class="bucket-head b4"><div class="spread"><h2>Closed or no date published</h2><p class="data">' + past.length + '</p></div></div>' +
+      '<section class="bucket"><div class="bucket-head b2"><div class="spread"><h2>No closing date published</h2><p class="data">' + undated.length + '</p></div></div>' +
+        '<p class="muted small" style="margin-top:6px;max-width:64ch">The directory lists the award but does not state a date. We do not invent one — open the official page to see the current round.</p>' +
+        groupBySource(undated) +
+      '</section>' +
+      '<section class="bucket"><div class="bucket-head b4"><div class="spread"><h2>Last published date has passed</h2><p class="data">' + closed.length + '</p></div></div>' +
         '<p class="muted small" style="margin-top:6px;max-width:64ch">Kept because most of these run on an annual cycle — the historic date tells you roughly when to look again. We do not move dates forward.</p>' +
-        '<details style="margin-top:14px"><summary class="label">Show all ' + past.length + '</summary><div style="margin-top:14px">' +
-        past.slice(0, 400).map(card).join('') + '</div></details>' +
+        groupBySource(closed) +
       '</section></div>';
   }
 
