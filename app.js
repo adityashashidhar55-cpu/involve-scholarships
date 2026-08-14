@@ -21,6 +21,12 @@
    */
   var ALL = [], GENERAL = [], COLLEGE = [], BY_SLUG = {}, SCHOOL_NAMES = [], SCHOOL_META = {}, SCHOOLS = [], FUNDERS = [];
   var universitiesLoaded = false;
+  // Data packs are served with a long cache lifetime, so a published data update
+  // would otherwise sit behind a returning visitor's browser cache. The build
+  // stamps a version here and every data fetch carries it, which makes a new
+  // build a new URL. window.INVOLVE_DATA_V is injected by assemble.mjs.
+  var DATA_V = '?v=' + (window.INVOLVE_DATA_V || '0');
+
   /** Directory listings — breadth without claimed detail. See directoryPage(). */
   var LISTINGS = [], listingsLoaded = false;
 
@@ -54,7 +60,7 @@
     listingsLoaded = true;
     if (window.INVOLVE_LISTINGS) { LISTINGS = window.INVOLVE_LISTINGS.listings || []; if (then) then(); return; }
     if (!window.fetch) { if (then) then(); return; }
-    window.fetch('data-listings.json')
+    window.fetch('data-listings.json' + DATA_V)
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (pack) { if (pack) { LISTINGS = pack.listings || []; render(); } if (then) then(); })
       .catch(function () { if (then) then(); });
@@ -64,7 +70,7 @@
     if (universitiesLoaded) { if (then) then(); return; }
     universitiesLoaded = true;
     if (!window.fetch) { if (then) then(); return; }
-    window.fetch('data-universities.json')
+    window.fetch('data-universities.json' + DATA_V)
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (pack) { if (pack) { hydrate(pack); render(); } if (then) then(); })
       .catch(function () { if (then) then(); });
@@ -1230,7 +1236,7 @@
     universitiesLoaded = true;
     start();
   } else {                                   // split build
-    window.fetch('data-core.json')
+    window.fetch('data-core.json' + DATA_V)
       .then(function (r) { return r.json(); })
       .then(function (pack) { hydrate(pack); start(); })
       .catch(function (e) {
