@@ -21,6 +21,8 @@
    */
   var ALL = [], GENERAL = [], COLLEGE = [], BY_SLUG = {}, SCHOOL_NAMES = [], SCHOOL_META = {}, SCHOOLS = [], FUNDERS = [];
   var universitiesLoaded = false;
+  /** Directory listings — breadth without claimed detail. See directoryPage(). */
+  var LISTINGS = [], listingsLoaded = false;
 
   /** Government / private / multilateral — never tied to one institution. */
   function isCollegeSpecific(r) { return r.scope === 'school' || !!r.school_name; }
@@ -47,6 +49,17 @@
    * Pull the university file in when it is actually needed. Safe to call
    * repeatedly; re-renders the current route once the data lands.
    */
+  function ensureListings(then) {
+    if (listingsLoaded) { if (then) then(); return; }
+    listingsLoaded = true;
+    if (window.INVOLVE_LISTINGS) { LISTINGS = window.INVOLVE_LISTINGS.listings || []; if (then) then(); return; }
+    if (!window.fetch) { if (then) then(); return; }
+    window.fetch('data-listings.json')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (pack) { if (pack) { LISTINGS = pack.listings || []; render(); } if (then) then(); })
+      .catch(function () { if (then) then(); });
+  }
+
   function ensureUniversities(then) {
     if (universitiesLoaded) { if (then) then(); return; }
     universitiesLoaded = true;
@@ -289,7 +302,7 @@
       '<h1 style="margin-top:10px;max-width:16ch">Find the funding you are actually eligible for.</h1>' +
       '<p class="muted" style="margin-top:18px;max-width:62ch">Government, foundation and multilateral scholarships — the awards you apply for directly, on your own merits. Every one is read from the funder\u2019s official page, quotes their exact wording, and shows the date we last checked it. Where a funder has not published something, we say so instead of guessing.</p>' +
       '<div class="row" style="margin-top:26px"><a class="btn btn-primary" href="#intake">Match my profile</a>' +
-      '<a class="btn" href="#/explore">Browse all funding</a><a class="btn" href="#/schools">University-run awards</a></div>' +
+      '<a class="btn" href="#/explore">Browse all funding</a><a class="btn" href="#/directory">Funding directory</a></div>' +
       '<div class="grid grid-3" style="margin-top:44px">' +
         statTile(GENERAL.length, 'government & private awards') +
         statTile(GENERAL.filter(function (r) { return r.status === 'open'; }).length, 'currently open') +
@@ -817,6 +830,55 @@
       }).join('') + '</div>';
   }
 
+  // -------------------------------------------------------------- directory
+  /**
+   * Official directories publish far more awards than we can fully verify. We
+   * carry those at listing depth and say so plainly, rather than either hiding
+   * them or dressing them up as checked records.
+   */
+  function directoryPage() {
+    if (!listingsLoaded || !LISTINGS.length) {
+      ensureListings();
+      return '<div class="wrap section"><p class="eyebrow">FUNDING DIRECTORY</p>' +
+        '<h1 style="margin-top:10px">Loading the directory…</h1></div>';
+    }
+    var now = NOW;
+    var open = LISTINGS.filter(function (l) { return l.deadline_date && new Date(l.deadline_date) >= now; });
+    var past = LISTINGS.filter(function (l) { return !l.deadline_date || new Date(l.deadline_date) < now; });
+
+    function card(l) {
+      var d = l.deadline_date ? daysUntil(l.deadline_date) : null;
+      return '<article class="card"><div class="spread"><div style="min-width:0">' +
+        (l.funder_name ? '<p class="label">' + esc(l.funder_name) + '</p>' : '') +
+        '<h3 style="margin-top:5px">' + (l.detail_url ? '<a href="' + esc(l.detail_url) + '" target="_blank" rel="noreferrer">' + esc(l.name) + '</a>' : esc(l.name)) + '</h3>' +
+        '</div><span class="badge badge-warn">DIRECTORY LISTING</span></div>' +
+        (l.summary ? '<p class="small muted" style="margin-top:10px">' + esc(l.summary) + '</p>' : '') +
+        '<div class="row" style="margin-top:10px">' +
+          (l.study_levels || []).map(function (x) { return '<span class="badge">' + esc(levelLabel(x)) + '</span>'; }).join('') +
+          (l.deadline_date ? '<span class="badge' + (d >= 0 ? ' badge-ember' : ' badge-warn') + '">' + esc(fmtDate(l.deadline_date)) + (d >= 0 ? '' : ' · passed') + '</span>' : '') +
+        '</div>' +
+        '<p class="small dim" style="margin-top:10px">Listed by ' + esc(l.source_name || 'an official directory') +
+        '. We have not yet checked the eligibility rules for this one — open the official page for the full conditions.</p>' +
+        '</article>';
+    }
+
+    return '<div class="wrap section">' +
+      '<p class="eyebrow">FUNDING DIRECTORY</p>' +
+      '<h1 style="margin-top:10px">' + LISTINGS.length + ' more awards from official directories</h1>' +
+      '<p class="muted" style="margin-top:14px;max-width:64ch">These come from government-run directories such as Campus France. We list what the directory publishes — the name, who runs it, a short description and the closing date — and link you to the official page. <strong>We have not yet gone through their eligibility rules one by one</strong>, which is what separates these from the matched results elsewhere on this site.</p>' +
+      '<div class="grid grid-2" style="margin-top:24px">' +
+        statTile(open.length, 'still open') + statTile(past.length, 'closed or undated') +
+      '</div>' +
+      '<section class="bucket"><div class="bucket-head b1"><div class="spread"><h2>Still open</h2><p class="data">' + open.length + '</p></div></div>' +
+        (open.length ? open.sort(function (a, b) { return a.deadline_date < b.deadline_date ? -1 : 1; }).map(card).join('') : '<p class="null">Nothing currently open in this set.</p>') +
+      '</section>' +
+      '<section class="bucket"><div class="bucket-head b4"><div class="spread"><h2>Closed or no date published</h2><p class="data">' + past.length + '</p></div></div>' +
+        '<p class="muted small" style="margin-top:6px;max-width:64ch">Kept because most of these run on an annual cycle — the historic date tells you roughly when to look again. We do not move dates forward.</p>' +
+        '<details style="margin-top:14px"><summary class="label">Show all ' + past.length + '</summary><div style="margin-top:14px">' +
+        past.slice(0, 400).map(card).join('') + '</div></details>' +
+      '</section></div>';
+  }
+
   // ---------------------------------------------------------------- explore
   function explorePage() {
     var byCountry = {};
@@ -1098,6 +1160,7 @@
   route(/^\/$/, homePage);
   route(/^\/results$/, resultsPage);
   route(/^\/schools$/, schoolsPage);
+  route(/^\/directory$/, directoryPage);
   route(/^\/scholarships\/([^/]+)$/, recordPage);
   route(/^\/explore$/, explorePage);
   route(/^\/explore\/deadlines$/, deadlinesPage);
@@ -1121,8 +1184,8 @@
     render();
     // Warm the university file straight after first paint so the Universities
     // page and school filters are ready by the time anyone reaches them.
-    if (window.requestIdleCallback) window.requestIdleCallback(function () { ensureUniversities(); });
-    else window.setTimeout(function () { ensureUniversities(); }, 1200);
+    if (window.requestIdleCallback) window.requestIdleCallback(function () { ensureUniversities(); ensureListings(); });
+    else window.setTimeout(function () { ensureUniversities(); ensureListings(); }, 1200);
   }
 
   if (window.INVOLVE_CATALOGUE) {           // single-file build
