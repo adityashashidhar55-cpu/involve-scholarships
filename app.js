@@ -199,7 +199,7 @@
   }
 
   function nullState(field, url) {
-    return '<span class="null">NOT PUBLISHED — ' + esc(field) +
+    return '<span class="null">NOT PUBLISHED: ' + esc(field) +
       (url ? ' · <a href="' + esc(url) + '" target="_blank" rel="noreferrer">check official page</a>' : '') + '</span>';
   }
 
@@ -323,7 +323,7 @@
   }
   function errorPage(e) {
     return '<div class="wrap section"><p class="eyebrow">SORRY</p><h1>This page didn\u2019t load</h1>' +
-      '<p class="muted" style="margin-top:14px;max-width:60ch">Your saved details may be from an older version of the site — this is a fault in the page. The most common cause is saved intake data from an older version.</p>' +
+      '<p class="muted" style="margin-top:14px;max-width:60ch">Your saved details may be from an older version of the site. This is a fault in the page. The most common cause is saved intake data from an older version.</p>' +
       '<div class="row" style="margin-top:22px"><a class="btn btn-primary" href="#/">Go home</a><button class="btn" id="clearAll">Clear saved data</button></div>' +
       '</div>';
   }
@@ -519,13 +519,13 @@
     '<div class="band-cream"><section class="wrap section">' +
       '<p class="eyebrow">INVOLVE SCHOLARSHIPS</p>' +
       '<h1 style="margin-top:10px;max-width:16ch">Find the funding you are actually eligible for.</h1>' +
-      '<p class="muted" style="margin-top:18px;max-width:62ch">Government, foundation and multilateral scholarships — the awards you apply for directly, on your own merits. Every one is read from the funder\u2019s official page, quotes their exact wording, and shows the date we last checked it. Where a funder has not published something, we say so instead of guessing.</p>' +
+      '<p class="muted" style="margin-top:18px;max-width:62ch">Government, foundation and multilateral scholarships. These are the awards you apply for directly, on your own merits. Every one is read from the funder\u2019s official page, quotes their exact wording, and shows the date we last checked it. Where a funder has not published something, we say so instead of guessing.</p>' +
       '<div class="row" style="margin-top:26px"><a class="btn btn-primary" href="#/intake">Match my profile</a>' +
       '<a class="btn" href="#/explore">Browse all funding</a><a class="btn" href="#/directory">Funding directory</a></div>' +
       '<div class="grid grid-3" style="margin-top:44px">' +
         statTile(GENERAL.length, 'government & private awards') +
         statTile(GENERAL.filter(function (r) { return r.status === 'open'; }).length, 'currently open') +
-        statTile(COLLEGE.length || '—', 'university-run, listed separately') +
+        statTile(COLLEGE.length || '0', 'university-run, listed separately') +
       '</div>' +
     '</section>';
   }
@@ -545,15 +545,15 @@
     '<section class="wrap section" id="intake" style="border-top:1px solid var(--hairline)">' +
       '<p class="eyebrow">INTAKE</p>' +
       '<h2 style="margin-top:10px">The more you tell us, the fewer false hopes</h2>' +
-      '<p class="muted" style="margin-top:12px;max-width:62ch">Only nationality and study level are required. Every other field turns an <em>unknown</em> into a real yes or no — leave one blank and the engine reports unknown for rules that depend on it, never a guess.</p>' +
+      '<p class="muted" style="margin-top:12px;max-width:62ch">Only nationality and study level are required. Every other field turns an <em>unknown</em> into a real yes or no. Leave one blank and the engine reports unknown for any rule that depends on it, rather than guessing.</p>' +
       '<form id="intake-form" style="margin-top:22px">' +
 
-      fieldset('1 · Who you are', 'Nationality decides more awards than anything else you can tell us — most funders restrict by it.',
+      fieldset('1 · Who you are', 'Nationality decides more awards than anything else you can tell us. Most funders restrict by it.',
         '<div class="grid grid-2">' +
           '<div><label class="field label" for="f-nat">Nationality *</label>' +
             '<select id="f-nat"><option value="">Select a country…</option>' +
             nationalityOptions().map(function (c) { return opt(c, cname(c), p.nationality); }).join('') + '</select>' +
-            '<p class="err" id="e-nat" hidden>Pick your nationality — it drives the whole match.</p></div>' +
+            '<p class="err" id="e-nat" hidden>Pick your nationality. It drives the whole match.</p></div>' +
           '<div><label class="field label" for="f-res">Country of residence</label>' +
             '<select id="f-res"><option value="">Same as nationality</option>' +
             nationalityOptions().map(function (c) { return opt(c, cname(c), p.residence); }).join('') + '</select></div>' +
@@ -573,9 +573,9 @@
             sel('f-term', V.INTAKE_TERMS, p.intake_term, 'Not sure yet') + '</div>' +
         '</div>' +
         '<div style="margin-top:18px"><p class="label">Course area <span class="dim">(type to search)</span></p>' + picker('course_groups', V.COURSE_GROUPS, p.course_groups, 'Search course areas…') + '</div>' +
-        '<div style="margin-top:18px"><label class="field label" for="f-course">Specific course or subject <span class="dim">(free text — matched against the funder’s own wording)</span></label>' +
+        '<div style="margin-top:18px"><label class="field label" for="f-course">Specific course or subject <span class="dim">(free text, matched against the funder’s own wording)</span></label>' +
           '<input id="f-course" type="text" placeholder="e.g. renewable energy engineering" value="' + esc((p.fields || []).join(', ')) + '"></div>' +
-        '<div style="margin-top:18px"><p class="label">Target universities <span class="dim">(' + SCHOOL_NAMES.length + ' with their own awards — type to search)</span></p>' +
+        '<div style="margin-top:18px"><p class="label">Target universities <span class="dim">(' + SCHOOL_NAMES.length + ' with their own awards, type to search)</span></p>' +
           picker('target_schools', SCHOOL_NAMES.map(function (n) { return { key: n, label: n }; }), p.target_schools, 'Search universities…') + '</div>' +
         '<div style="margin-top:18px"><p class="label">Destination countries <span class="dim">(blank = open to anywhere)</span></p>' +
           picker('destinations', destinationOptions().map(function (c) { return { key: c, label: cname(c) }; }), p.destinations, 'Search countries…') + '</div>') +
@@ -603,10 +603,10 @@
 
       fieldset('5 · Tests and work', null,
         '<div class="grid grid-2">' +
-          '<div><label class="field label" for="f-ielts">IELTS</label><input id="f-ielts" type="number" step="0.5" min="0" max="9" placeholder="max 9" value="' + esc(p.test_scores && p.test_scores.ielts != null ? p.test_scores.ielts : '') + '"><p class="err" id="e-ielts" hidden>IELTS is scored 0–9.</p></div>' +
-          '<div><label class="field label" for="f-toefl">TOEFL iBT</label><input id="f-toefl" type="number" step="1" min="0" max="120" placeholder="max 120" value="' + esc(p.test_scores && p.test_scores.toefl != null ? p.test_scores.toefl : '') + '"><p class="err" id="e-toefl" hidden>TOEFL iBT is scored 0–120.</p></div>' +
-          '<div><label class="field label" for="f-gre">GRE total</label><input id="f-gre" type="number" step="1" min="260" max="340" placeholder="260–340" value="' + esc(p.test_scores && p.test_scores.gre != null ? p.test_scores.gre : '') + '"><p class="err" id="e-gre" hidden>GRE total is 260–340.</p></div>' +
-          '<div><label class="field label" for="f-gmat">GMAT total</label><input id="f-gmat" type="number" step="1" min="205" max="805" placeholder="205–805" value="' + esc(p.test_scores && p.test_scores.gmat != null ? p.test_scores.gmat : '') + '"><p class="err" id="e-gmat" hidden>GMAT total is 205–805.</p></div>' +
+          '<div><label class="field label" for="f-ielts">IELTS</label><input id="f-ielts" type="number" step="0.5" min="0" max="9" placeholder="max 9" value="' + esc(p.test_scores && p.test_scores.ielts != null ? p.test_scores.ielts : '') + '"><p class="err" id="e-ielts" hidden>IELTS is scored 0 to 9.</p></div>' +
+          '<div><label class="field label" for="f-toefl">TOEFL iBT</label><input id="f-toefl" type="number" step="1" min="0" max="120" placeholder="max 120" value="' + esc(p.test_scores && p.test_scores.toefl != null ? p.test_scores.toefl : '') + '"><p class="err" id="e-toefl" hidden>TOEFL iBT is scored 0 to 120.</p></div>' +
+          '<div><label class="field label" for="f-gre">GRE total</label><input id="f-gre" type="number" step="1" min="260" max="340" placeholder="260 to 340" value="' + esc(p.test_scores && p.test_scores.gre != null ? p.test_scores.gre : '') + '"><p class="err" id="e-gre" hidden>GRE total is 260 to 340.</p></div>' +
+          '<div><label class="field label" for="f-gmat">GMAT total</label><input id="f-gmat" type="number" step="1" min="205" max="805" placeholder="205 to 805" value="' + esc(p.test_scores && p.test_scores.gmat != null ? p.test_scores.gmat : '') + '"><p class="err" id="e-gmat" hidden>GMAT total is 205 to 805.</p></div>' +
           '<div><label class="field label" for="f-work">Years of full-time work experience</label><input id="f-work" type="number" step="1" min="0" max="60" value="' + esc(p.work_experience_years == null ? '' : p.work_experience_years) + '"></div>' +
           '<div><label class="field label" for="f-employ">Current situation</label>' + sel('f-employ', V.EMPLOYMENT, p.employment_status, 'Select…') + '</div>' +
         '</div>') +
@@ -621,7 +621,7 @@
         '<div style="margin-top:16px"><p class="label">Will you apply as a need-based candidate?</p>' + tri('declares_financial_need', p.declares_financial_need, 'Yes, I will document need', 'No') + '</div>') +
 
       fieldset('7 · Circumstances and constraints',
-        'Funders price these in explicitly. Anything not on the list goes in the free-text box — it is shown to you and included in a consultant handoff, but never auto-evaluated.',
+        'Funders price these in explicitly. Anything not on the list goes in the free-text box. You still see it, and it goes into a consultant handoff, but the engine does not evaluate it.',
         '<p class="label">Status</p>' + chips('special_status', V.STATUSES, p.special_status) +
         '<div style="margin-top:18px"><label class="field label" for="f-other">Any other status or circumstance</label>' +
           '<textarea id="f-other" rows="2" placeholder="e.g. I support a dependent parent; my degree was interrupted by conflict">' + esc(p.other_status_note || '') + '</textarea></div>' +
@@ -675,7 +675,7 @@
   // ----------------------------------------------------------------- results
   var BUCKET_META = {
     eligible_now: { cls: 'b1', title: 'Eligible now', blurb: 'Every hard rule the funder published is satisfied by what you told us.' },
-    eligible_if_you_act: { cls: 'b2', title: 'Eligible if you act', blurb: 'One or more hard rules are not yet met — each is something you can still do or supply.' },
+    eligible_if_you_act: { cls: 'b2', title: 'Eligible if you act', blurb: 'One or more hard rules are not yet met. Each is something you can still do or supply.' },
     competitive_stretch: { cls: 'b3', title: 'Competitive stretch', blurb: 'You clear the hard rules but sit below the typical bar. Worth applying with a strong case.' },
     not_eligible: { cls: 'b4', title: 'Not eligible', blurb: 'A published rule rules you out. The exact rule is quoted so you can check it yourself.' }
   };
@@ -817,7 +817,7 @@
       '<button class="btn btn-sm" data-save="' + esc(s.slug) + '">' + (loadShortlist().indexOf(s.slug) >= 0 ? 'Saved ✓' : 'Save') + '</button></div>' +
       '</article>';
   }
-  function fmtF(n) { return n == null ? '—' : (Math.round(n * 100) / 100); }
+  function fmtF(n) { return n == null ? 'not given' : (Math.round(n * 100) / 100); }
 
   /**
    * Why a record sits where it does, in words a applicant can act on.
@@ -887,7 +887,7 @@
       (need.length ? '<div class="banner" style="margin-top:16px;border-color:var(--steel)"><p class="label" style="color:var(--steel)">NEED-BASED AWARD</p>' +
         '<p class="muted small" style="margin-top:8px;max-width:66ch">This funder assesses financial need in prose, not against a number, so no engine can tell you whether you qualify. What they published:</p>' +
         need.map(function (c) { return '<p class="snippet">“' + esc(c.source_snippet || c.value) + '”</p>'; }).join('') +
-        (p && p.declares_financial_need ? '<p class="small" style="margin-top:10px">You said you will apply as a need-based candidate — expect to evidence it with documents.</p>' : '') +
+        (p && p.declares_financial_need ? '<p class="small" style="margin-top:10px">You said you will apply as a need-based candidate. Expect to evidence that with documents.</p>' : '') +
         '</div>' : '') +
 
       (numericNeed.length ? '<div class="banner" style="margin-top:16px"><p class="label">PUBLISHED INCOME CAP</p>' +
@@ -895,17 +895,17 @@
           var mineAmt = p && p.household_income_amount;
           return '<p style="margin-top:8px">Cap: <strong>' + esc(c.value.toLocaleString('en')) + '</strong>' +
             (mineAmt != null ? ' · you entered <strong>' + esc(fmtMoney(mineAmt, p.household_income_currency)) + '</strong>' : ' · you have not entered an income') +
-            '</p><p class="small dim" style="margin-top:4px">The funder does not state the currency of this cap on the page we read — confirm on the official page before relying on this comparison.</p>' +
+            '</p><p class="small dim" style="margin-top:4px">The funder does not state the currency of this cap on the page we read. Confirm it on the official page before relying on this comparison.</p>' +
             '<p class="snippet">“' + esc(c.source_snippet || '') + '”</p>';
         }).join('') + '</div>' : '') +
 
       '<hr class="rule">' +
       '<h2>What it is worth</h2>' +
+      valueBlock(s) +
       '<div class="grid grid-2" style="margin-top:16px">' +
-        kv('Award value (funder wording)', s.value_verbatim, s.source_url) +
         kv('Duration', s.duration_note, s.source_url) +
         kv('Number of awards', s.number_of_awards != null ? String(s.number_of_awards) : s.award_count_note, s.source_url) +
-        kv('Renewable', s.renewable == null ? null : (s.renewable ? 'Yes — ' + (s.renewal_conditions || 'conditions on the official page') : 'No'), s.source_url) +
+        kv('Renewable', s.renewable == null ? null : (s.renewable ? 'Yes. ' + (s.renewal_conditions || 'Conditions are on the official page.') : 'No'), s.source_url) +
         kv('Where you can study', (s.destination_countries || []).length ? s.destination_countries.map(cname).join(', ') : null, s.source_url) +
         kv('Who can apply (nationality)', (s.eligible_nationalities || []).length ? s.eligible_nationalities.map(cname).join(', ') : null, s.source_url) +
       '</div>' +
@@ -934,24 +934,24 @@
     return '<h2>Timeline</h2>' +
       '<p class="muted small" style="margin-top:8px;max-width:64ch">Only dates the funder published. Nothing here is estimated.</p>' +
       '<div class="card" style="margin-top:16px">' +
-        (!items.length ? '<p class="null">NOT PUBLISHED — no dates for this award</p>' :
+        (!items.length ? '<p class="null">NOT PUBLISHED: no dates for this award</p>' :
           items.map(function (i) {
             var d = daysUntil(i.d);
             return '<div class="step"><span class="stepno">' + (i.k === 'deadline' ? '!' : '·') + '</span><div style="min-width:0">' +
-              '<p><strong>' + esc(fmtDate(i.d)) + '</strong> — ' + esc(i.t) + '</p>' +
+              '<p><strong>' + esc(fmtDate(i.d)) + '</strong>: ' + esc(i.t) + '</p>' +
               '<p class="small dim" style="margin-top:4px">' + (d < 0 ? 'passed ' + Math.abs(d) + ' days ago' : 'in ' + d + ' days') + '</p></div></div>';
           }).join('')) +
-        (s.decision_timeline_note ? '<p class="small muted" style="margin-top:14px"><strong>Decision:</strong> ' + esc(s.decision_timeline_note) + '</p>' : '<p class="null" style="margin-top:14px">NOT PUBLISHED — decision timeline</p>') +
-        (s.status === 'cycle_closed' ? '<p class="null" style="margin-top:12px">This cycle has closed. The historic dates are kept so you can plan the next round — no next-cycle date is asserted unless the funder published one.</p>' : '') +
+        (s.decision_timeline_note ? '<p class="small muted" style="margin-top:14px"><strong>Decision:</strong> ' + esc(s.decision_timeline_note) + '</p>' : '<p class="null" style="margin-top:14px">NOT PUBLISHED: decision timeline</p>') +
+        (s.status === 'cycle_closed' ? '<p class="null" style="margin-top:12px">This cycle has closed. The historic dates are kept so you can plan the next round, no next-cycle date is asserted unless the funder published one.</p>' : '') +
       '</div>';
   }
 
   function eligibilityBlock(s, byRule, hasProfile) {
     return '<h2>Eligibility rules</h2>' +
       '<p class="muted small" style="margin-top:8px;max-width:66ch">Each rule is quoted from the official page. ' +
-        (hasProfile ? 'Ticks are computed against your profile — a dashed box means the funder published a rule we cannot check because you have not given us that detail.' : 'Fill in the intake to have these ticked against you.') + '</p>' +
+        (hasProfile ? 'Ticks are computed against your profile. A dashed box means the funder published a rule we cannot check, because you have not given us that detail yet.' : 'Fill in the intake to have these ticked against you.') + '</p>' +
       '<div class="card" style="margin-top:16px">' +
-      (!(s.criteria || []).length ? '<p class="null">NOT PUBLISHED — eligibility rules</p>' :
+      (!(s.criteria || []).length ? '<p class="null">NOT PUBLISHED: eligibility rules</p>' :
         s.criteria.map(function (c) {
           var ev = byRule[ruleKey(c)], st = ev ? ev.status : null;
           var cls = st === 'satisfied' ? 'ok' : st === 'failed' ? 'no' : 'unk';
@@ -972,7 +972,7 @@
       var svc = V.helpFor(q.item + ' ' + (q.spec || '') + ' ' + (q.prompt_text || ''));
       if (svc) svcCount[svc]++;
       var help = svc ? '<p class="small" style="margin-top:7px"><a href="' + esc(V.HELP_COPY[svc].url) + '" target="_blank" rel="noreferrer">' +
-        esc(V.HELP_COPY[svc].name) + ' helps with this</a> <span class="dim">— ' + esc(V.HELP_COPY[svc].line) + '</span></p>' : '';
+        esc(V.HELP_COPY[svc].name) + ' helps with this</a> <span class="dim">' + esc(V.HELP_COPY[svc].line) + '</span></p>' : '';
       return '<div class="crit"><span class="tick" aria-hidden="true">' + (i + 1) + '</span><div style="min-width:0">' +
         '<p><strong>' + esc(q.item) + '</strong> ' + (q.mandatory ? '<span class="badge badge-warn">REQUIRED</span>' : '<span class="badge">OPTIONAL</span>') +
         (svc ? ' <span class="badge badge-steel">' + (svc === 'resume' ? 'CV WORK' : 'WRITTEN WORK') + '</span>' : '') + '</p>' +
@@ -985,21 +985,21 @@
     if (svcCount.resume || svcCount.consulting) {
       summary = '<div class="banner" style="margin-top:16px"><p class="label">WHERE INVOLVE HELPS ON THIS ONE</p>' +
         (svcCount.resume ? '<p class="small" style="margin-top:8px">' + svcCount.resume + ' item' + (svcCount.resume === 1 ? '' : 's') +
-          ' need a CV in academic format — <a href="' + esc(V.HELP_COPY.resume.url) + '" target="_blank" rel="noreferrer">Involve Resume</a>.</p>' : '') +
+          ' need a CV in academic format. See ' + esc(V.HELP_COPY.resume.url) + '" target="_blank" rel="noreferrer">Involve Resume</a>.</p>' : '') +
         (svcCount.consulting ? '<p class="small" style="margin-top:6px">' + svcCount.consulting + ' item' + (svcCount.consulting === 1 ? '' : 's') +
-          ' are essays, statements, references or interviews — <a href="' + esc(V.HELP_COPY.consulting.url) + '" target="_blank" rel="noreferrer">Involve Consulting</a>.</p>' : '') +
+          ' are essays, statements, references or interviews. See ' + esc(V.HELP_COPY.consulting.url) + '" target="_blank" rel="noreferrer">Involve Consulting</a>.</p>' : '') +
         '</div>';
     }
 
     return '<h2>Document checklist</h2>' +
-      '<div class="card" style="margin-top:16px">' + (reqs.length ? rows : '<p class="null">NOT PUBLISHED — document checklist</p>') + '</div>' + summary;
+      '<div class="card" style="margin-top:16px">' + (reqs.length ? rows : '<p class="null">NOT PUBLISHED: document checklist</p>') + '</div>' + summary;
   }
 
   function procedureBlock(s) {
     var steps = (s.procedure_steps || []).slice().sort(function (a, b) { return (a.step_no || 0) - (b.step_no || 0); });
     return '<h2>How to apply</h2>' +
       '<div class="card" style="margin-top:16px">' +
-      (!steps.length ? '<p class="null">NOT PUBLISHED — application procedure</p>' :
+      (!steps.length ? '<p class="null">NOT PUBLISHED: application procedure</p>' :
         steps.map(function (st) {
           return '<div class="step"><span class="stepno">' + esc(st.step_no) + '</span><div style="min-width:0">' +
             '<p><strong>' + esc(st.title) + '</strong> <span class="badge">' + esc(titleCase(st.owner || 'unspecified')) + ' does this</span></p>' +
@@ -1007,16 +1007,16 @@
             (st.url ? '<p class="small" style="margin-top:5px"><a href="' + esc(st.url) + '" target="_blank" rel="noreferrer">' + esc(st.url) + '</a></p>' : '') +
           '</div></div>';
         }).join('')) +
-      (s.requires_nomination === true ? '<p class="null" style="margin-top:14px">Requires nomination — you cannot apply directly. ' + esc(s.nomination_note || '') + '</p>' : '') +
+      (s.requires_nomination === true ? '<p class="null" style="margin-top:14px">Requires nomination, so you cannot apply directly. ' + esc(s.nomination_note || '') + '</p>' : '') +
       (s.requires_university_admission_first === true ? '<p class="null" style="margin-top:10px">You must hold university admission before applying.</p>' : '') +
-      (s.requires_university_admission_first == null ? '<p class="null" style="margin-top:10px">Whether admission is needed first is NOT PUBLISHED — check the official page.</p>' : '') +
+      (s.requires_university_admission_first == null ? '<p class="null" style="margin-top:10px">Whether admission is needed first is NOT PUBLISHED. Check the official page.</p>' : '') +
       '</div>';
   }
 
   function catchesBlock(s) {
     var rows = [['Bond or return clause', s.bond_or_return_clause], ['Work restrictions during the award', s.work_restrictions],
       ['Tax treatment', s.taxable_note], ['Combinable with other awards', s.combinable_with_other_awards]];
-    return '<h2>Catches</h2><p class="muted small" style="margin-top:8px;max-width:64ch">The conditions that are easy to miss. A blank here means the funder did not publish it — not that there is no catch.</p>' +
+    return '<h2>Catches</h2><p class="muted small" style="margin-top:8px;max-width:64ch">The conditions that are easy to miss. A blank here means the funder did not publish it. It does not mean there is no catch.</p>' +
       '<div class="grid grid-2" style="margin-top:16px">' + rows.map(function (c) { return kv(c[0], c[1], s.source_url); }).join('') + '</div>';
   }
 
@@ -1026,7 +1026,7 @@
       '<p class="snippet" style="margin-top:14px">“' + esc(s.source_snippet) + '”</p>' +
       '<p class="small" style="margin-top:14px"><a href="' + esc(s.source_url) + '" target="_blank" rel="noreferrer">' + esc(s.source_url) + '</a></p>' +
       '<p class="small dim" style="margin-top:10px">Last verified ' + esc(fmtDate(s.last_verified_at) || 'date not recorded') +
-      '. Funders change their pages without notice — always confirm on the official page before you rely on anything here.</p></div>';
+      '. Funders change their pages without notice. Always confirm on the official page before you rely on anything here.</p></div>';
   }
 
   function verdictBlock(r) {
@@ -1042,12 +1042,103 @@
       }).join('') + '</ul>';
     } else if (r.reason) body = '<p class="small muted" style="margin-top:10px">' + esc(humanize(r.reason)) + '</p>';
     return '<div class="banner" style="margin-top:26px"><p class="label">YOUR VERDICT</p>' +
-      '<p style="margin-top:8px"><strong>' + esc(meta.title) + '</strong> — ' + esc(meta.blurb) + '</p>' + body + '</div>';
+      '<p style="margin-top:8px"><strong>' + esc(meta.title) + '</strong>: ' + esc(meta.blurb) + '</p>' + body + '</div>';
   }
 
+  /**
+   * Funders pack several facts into one field, separated by semicolons.
+   * Where that happens, split on their own separator so it reads as a list.
+   * Short values stay as a sentence: a one item bullet looks like a mistake.
+   */
   function kv(label, value, url) {
-    return '<div class="card card-tight"><p class="label">' + esc(label) + '</p>' +
-      '<p style="margin-top:7px">' + (value ? esc(value) : nullState(label.toLowerCase(), url)) + '</p></div>';
+    var head = '<div class="card card-tight"><p class="label">' + esc(label) + '</p>';
+    if (!value) return head + '<p style="margin-top:7px">' + nullState(label.toLowerCase(), url) + '</p></div>';
+    var parts = valueLines(value);
+    if (parts.length > 1 && String(value).length > 70) {
+      return head + '<ul class="kv-list">' + parts.map(function (x) {
+        return '<li>' + esc(x) + '</li>';
+      }).join('') + '</ul></div>';
+    }
+    return head + '<p style="margin-top:7px">' + esc(value) + '</p></div>';
+  }
+
+  var COVERAGE_LABEL = {
+    full_ride: 'Everything covered',
+    full_tuition: 'Full tuition',
+    partial_tuition: 'Part of your tuition',
+    stipend_only: 'Living costs only',
+    travel_only: 'Travel only',
+    fee_waiver: 'Fees waived',
+    loan_subsidy: 'Loan subsidy'
+  };
+  var EXTRA_LABEL = {
+    travel: 'Travel', insurance: 'Health insurance', language_course: 'Language course',
+    accommodation: 'Accommodation', books: 'Books', settling_in: 'Settling-in allowance'
+  };
+
+  function money(n, cur) {
+    if (n == null) return null;
+    var sym = { GBP: '\u00a3', EUR: '\u20ac', USD: '$', JPY: '\u00a5', INR: '\u20b9', AUD: 'A$', CAD: 'C$' }[cur];
+    var num = Number(n).toLocaleString();
+    return sym ? sym + num : num + (cur ? ' ' + cur : '');
+  }
+
+  /**
+   * The funder's own wording, split on the funder's own semicolons. No words
+   * are changed. A single-item result renders as a sentence, not a one-item
+   * list, because a bullet on its own looks like a mistake.
+   */
+  function valueLines(text) {
+    if (!text) return [];
+    return String(text).split(/\s*;\s*/)
+      .map(function (x) { return x.trim().replace(/^[,.\s]+|[,.\s]+$/g, ''); })
+      .filter(function (x) { return x.length > 1; });
+  }
+
+  function valueBlock(s) {
+    var lines = valueLines(s.value_verbatim);
+    var head = COVERAGE_LABEL[s.coverage_type] || null;
+    var stipend = money(s.stipend_amount, s.stipend_currency);
+    if (stipend && s.stipend_period) stipend += ' a ' + s.stipend_period;
+    var extras = [];
+    if (s.extras) {
+      Object.keys(s.extras).forEach(function (k) {
+        if (s.extras[k]) extras.push(EXTRA_LABEL[k] || titleCase(k));
+      });
+    }
+    if (!lines.length && !head && !stipend) {
+      return '<div class="card card-tight"><p class="label">Award value</p>' +
+        '<p style="margin-top:7px">' + nullState('award value', s.source_url) + '</p></div>';
+    }
+
+    return '<div class="card value-card">' +
+      '<p class="label">What you get</p>' +
+      ((head || stipend)
+        ? '<div class="value-head">' +
+            (head ? '<span class="value-headline">' + esc(head) + '</span>' : '') +
+            (stipend ? '<span class="value-stipend">' + esc(stipend) + '</span>' : '') +
+            (s.tuition_coverage_pct != null && s.coverage_type === 'partial_tuition'
+              ? '<span class="value-pct">' + esc(s.tuition_coverage_pct) + '% of tuition</span>' : '') +
+          '</div>'
+        : '') +
+      (extras.length
+        ? '<div class="row" style="margin-top:10px">' +
+            extras.map(function (x) { return '<span class="badge">' + esc(x) + '</span>'; }).join('') +
+          '</div>'
+        : '') +
+      (lines.length > 1
+        ? '<ul class="value-list">' + lines.map(function (l) {
+            return '<li>' + esc(l) + '</li>';
+          }).join('') + '</ul>'
+        : (lines.length === 1
+            ? '<p class="value-single">' + esc(lines[0]) + '</p>'
+            : '')) +
+      (lines.length
+        ? '<p class="small dim value-src">Quoted from the funder. ' +
+          (s.source_url ? '<a href="' + esc(s.source_url) + '" target="_blank" rel="noopener">See it on their page</a>' : '') +
+          '</p>'
+        : '') +
+      '</div>';
   }
 
   function jsonLd(s) {
@@ -1094,8 +1185,8 @@
   /** Shared by both directory views, so the wording is stated once. */
   function directoryCaveat() {
     return '<p class="muted" style="margin-top:14px;max-width:64ch">These come from official ' +
-      'government, agency and university scholarship databases. We list what each one publishes — ' +
-      'the name, who runs it, a short description and the closing date — and link you to the ' +
+      'government, agency and university scholarship databases. We list what each one publishes: ' +
+      'the name, who runs it, a short description and the closing date. We then link you to the ' +
       'official page. <strong>We have not yet gone through their eligibility rules one by one</strong>, ' +
       'which is what separates these from the matched results elsewhere on this site.</p>';
   }
@@ -1115,7 +1206,7 @@
         (l.deadline_date && d < 0 && !isRecurring(l) ? '<span class="badge badge-warn">' + esc(fmtDate(l.deadline_date)) + ' \u00b7 closed</span>' : '') +
       '</div>' +
       '<p class="small dim" style="margin-top:10px">Listed by ' + esc(l.source_name || 'an official directory') +
-      '. We have not yet checked the eligibility rules for this one — open the official page for the full conditions.</p>' +
+      '. We have not yet checked the eligibility rules for this one. Open the official page for the full conditions.</p>' +
       '</article>';
   }
 
@@ -1145,7 +1236,7 @@
           '<td class="num">' + Number(s.count).toLocaleString() + '</td></tr>';
       }).join('') +
       '</tbody></table></div>' +
-      '<p class="small dim" style="margin-top:18px">Prefer a plain list? <a href="/d/">Browse every listing as pages</a> — that version is also what search engines read.</p>' +
+      '<p class="small dim" style="margin-top:18px">Prefer a plain list? <a href="/d/">Browse every listing as pages</a>. That version is also what search engines read.</p>' +
       '</div>';
   }
 
@@ -1414,7 +1505,7 @@
     return '<div class="wrap section"><p class="eyebrow">DEADLINE CALENDAR</p>' +
       '<h1 style="margin-top:10px">When these close</h1>' +
       '<p class="muted" style="margin-top:12px;max-width:64ch">Showing ' + esc(pool.label) +
-      ' \u2014 ' + pool.list.length.toLocaleString() + ' award' + (pool.list.length === 1 ? '' : 's') +
+      '. ' + pool.list.length.toLocaleString() + ' award' + (pool.list.length === 1 ? '' : 's') +
       '. Dates are the ones funders published; nothing here is inferred.' +
       (!pool.hasProfile ? ' <a href="#/intake">Tell us about you</a> and this narrows to awards you can actually hold.' : '') +
       '</p>' +
@@ -1443,7 +1534,7 @@
           '<ul style="margin:12px 0 0;padding-left:18px">' +
           recurringSoon.slice(0, 25).map(function (r) {
             return '<li class="small"><a href="#/scholarships/' + esc(r.slug) + '">' + esc(r.name) + '</a>' +
-              ' <span class="dim">\u2014 last closed ' + esc(fmtDate(r.deadline_date)) + '</span></li>';
+              ' <span class="dim">last closed ' + esc(fmtDate(r.deadline_date)) + '</span></li>';
           }).join('') +
           (recurringSoon.length > 25 ? '<li class="small dim">and ' + (recurringSoon.length - 25) + ' more</li>' : '') +
           '</ul></div>'
@@ -1451,7 +1542,7 @@
 
       '<section class="bucket" style="margin-top:30px"><div class="bucket-head b1"><div class="spread">' +
         '<h2>Open now</h2><p class="data">' + openNow.length + '</p></div></div>' +
-        '<p class="muted small" style="margin-top:6px;max-width:66ch">Every award in this set that is still accepting applications, soonest deadline first. Awards with no published closing date sit at the end \u2014 those are usually rolling.</p>' +
+        '<p class="muted small" style="margin-top:6px;max-width:66ch">Every award in this set that is still accepting applications, soonest deadline first. Awards with no published closing date sit at the end. Those are usually rolling.</p>' +
         (openNow.length
           ? '<div style="overflow-x:auto;margin-top:14px"><table><thead><tr><th>Closes</th><th>Award</th><th>Funder</th><th class="num">In</th></tr></thead><tbody>' +
             openNow.slice(0, 200).map(function (r) {
@@ -1479,7 +1570,7 @@
     var stale = ALL.filter(function (r) { var d = r.last_verified_at ? daysSince(r.last_verified_at) : null; return d !== null && d > STALE_DAYS; }).length;
     return '<div class="wrap-narrow section"><p class="eyebrow">METHODOLOGY</p><h1 style="margin-top:10px">How we check every award</h1>' +
       '<div class="stack" style="margin-top:22px">' +
-        '<p class="muted">Every entry is read from an official funder, government or university page. We never copy from scholarship listing sites — if we cannot find the funder\u2019s own page, the award does not go in.</p>' +
+        '<p class="muted">Every entry is read from an official funder, government or university page. We never copy from scholarship listing sites, if we cannot find the funder\u2019s own page, the award does not go in.</p>' +
         '<p class="muted">Every entry shows you the page it came from, quotes the funder\u2019s own wording for each rule, and tells you when we last checked it. Anything we cannot show a source for does not go in.</p>' +
         '<p class="muted">Where a funder has not published something, the field is null and the page says <em>NOT PUBLISHED</em>. Nulls are never filled from general knowledge, and amounts keep the funder’s original currency and wording.</p>' +
         '<p class="muted">Financial need is the clearest case. Where a funder publishes an income cap as a figure, we compare it with yours. Where they simply ask you to demonstrate need, we mark the award need-based and quote what they said, rather than deciding on your behalf.</p>' +
@@ -1503,7 +1594,7 @@
     return '<section class="card noprint" style="margin-top:46px;border-color:var(--hairline-strong)">' +
       '<p class="eyebrow">INVOLVE</p>' +
       '<h2 style="margin-top:10px;max-width:24ch">A shortlist is not an application.</h2>' +
-      '<p class="muted" style="margin-top:12px;max-width:62ch">The buckets tell you what you qualify for. They do not tell you whether your CV, essays and references will survive a selection panel — and that is where funded places are won and lost.</p>' +
+      '<p class="muted" style="margin-top:12px;max-width:62ch">The buckets tell you what you qualify for. They cannot tell you whether your CV, essays and references will survive a selection panel, and that is where funded places are won and lost.</p>' +
       '<div class="grid grid-2" style="margin-top:18px">' +
         '<div class="card card-tight"><p class="label">CV AND RESUME</p><p class="small muted" style="margin-top:6px">' + esc(V.HELP_COPY.resume.line) + '</p>' +
           '<p class="small" style="margin-top:8px"><a href="' + esc(V.HELP_COPY.resume.url) + '" target="_blank" rel="noreferrer">involveresume.com</a></p></div>' +
@@ -1512,9 +1603,9 @@
       '</div>' +
       (has ? '<label class="row" style="margin-top:18px;align-items:flex-start;gap:10px">' +
         '<input type="checkbox" id="consent" style="width:auto;margin-top:4px">' +
-        '<span class="small">Send my intake profile — including anything I wrote in “any other status” — to Involve Consulting so the review starts from real detail. Unticked, the link opens with nothing attached.</span></label>' : '') +
+        '<span class="small">Send my intake profile to Involve Consulting, including anything I wrote in "any other status", so the review starts from real detail. Unticked, the link opens with nothing attached.</span></label>' : '') +
       '<div class="row" style="margin-top:16px"><button class="btn btn-primary" id="cta">Get a free profile review</button></div>' +
-      '<p class="small dim" style="margin-top:12px">Browsing, matching and every record on this site are free and always will be — this is public information.</p></section>';
+      '<p class="small dim" style="margin-top:12px">Browsing, matching and every record on this site are free and always will be. This is public information.</p></section>';
   }
 
   // -------------------------------------------------------------------- bind

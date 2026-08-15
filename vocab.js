@@ -1,4 +1,4 @@
-/* vocab.js — human-readable names and the intake vocabulary.
+/* vocab.js: human-readable names and the intake vocabulary.
  * Country codes are never shown to a user; every surface resolves through
  * COUNTRY_NAME. Pseudo-codes the register uses for groups (any, eea,
  * commonwealth, developing) are spelled out too. */
@@ -125,8 +125,8 @@
   var CURRENCIES = ['USD', 'EUR', 'GBP', 'INR', 'AUD', 'CAD', 'SGD', 'AED', 'ZAR', 'NGN', 'KES', 'BRL', 'MXN', 'PHP', 'IDR', 'PKR', 'BDT', 'LKR', 'JPY', 'CNY'];
 
   var INTAKE_TERMS = [
-    { key: 'autumn', label: 'Autumn / September–October' },
-    { key: 'spring', label: 'Spring / January–March' },
+    { key: 'autumn', label: 'Autumn (September or October)' },
+    { key: 'spring', label: 'Spring (January to March)' },
     { key: 'summer', label: 'Summer' },
     { key: 'rolling', label: 'Rolling or unsure' }
   ];
