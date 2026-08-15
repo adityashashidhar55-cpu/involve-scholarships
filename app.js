@@ -334,10 +334,21 @@
   }
 
   // ------------------------------------------------------------------ intake
+  /**
+   * Every country we can name, not only the ones some funder happened to list.
+   * Deriving this from the data hid real applicants: a Saudi student could not
+   * pick Saudi Arabia, because no record named it, even though plenty of awards
+   * are open to any nationality.
+   */
   function nationalityOptions() {
     var set = {};
+    Object.keys(V.COUNTRY_NAME || {}).forEach(function (c) {
+      if (c.length === 2 && c === c.toUpperCase()) set[c] = 1;
+    });
     ALL.forEach(function (r) {
-      (r.eligible_nationalities || []).forEach(function (c) { if (c && ['any', 'eea', 'commonwealth', 'developing'].indexOf(c) < 0) set[c] = 1; });
+      (r.eligible_nationalities || []).forEach(function (c) {
+        if (c && ['any', 'eea', 'commonwealth', 'developing'].indexOf(c) < 0) set[c] = 1;
+      });
     });
     return Object.keys(set).sort(function (a, b) { return cname(a).localeCompare(cname(b)); });
   }
@@ -346,10 +357,22 @@
     ALL.forEach(function (r) { (r.destination_countries || []).forEach(function (c) { if (c && c !== 'any') set[c] = 1; }); });
     return Object.keys(set).sort(function (a, b) { return cname(a).localeCompare(cname(b)); });
   }
+  /**
+   * Application years to offer. Derived from the data, but never in the past:
+   * offering "2019 cycle" to someone applying now is noise. Always includes
+   * this year and the next two, so a new cycle is selectable before any funder
+   * has published a date for it.
+   */
   function deadlineYears() {
+    var thisYear = NOW.getFullYear();
     var set = {};
-    ALL.forEach(function (r) { if (r.deadline_date) set[r.deadline_date.slice(0, 4)] = 1; });
-    return Object.keys(set).sort();
+    ALL.forEach(function (r) {
+      if (!r.deadline_date) return;
+      var y = Number(r.deadline_date.slice(0, 4));
+      if (y >= thisYear) set[y] = 1;
+    });
+    set[thisYear] = 1; set[thisYear + 1] = 1; set[thisYear + 2] = 1;
+    return Object.keys(set).map(Number).sort(function (a, b) { return a - b; }).map(String);
   }
 
   function opt(value, label, selected) {
@@ -734,6 +757,10 @@
     }).join(', '));
     if ((p.fields || []).length) filterNote.push('“' + p.fields.join(', ') + '”');
 
+    var wantsMgmt = p.study_level === 'mba' ||
+      (p.course_groups || []).indexOf('business') >= 0 ||
+      /manage|business|mba|mim|finance|marketing/i.test((p.fields || []).join(' '));
+
     var html = '<div class="wrap section">' +
       '<p class="eyebrow">YOUR MATCH</p>' +
       '<h1 style="margin-top:10px">Four buckets, never one list</h1>' +
@@ -741,6 +768,19 @@
       '<p class="small dim" style="margin-top:12px">' + generalPool.length + ' of ' + GENERAL.length + ' open-pool records assessed' +
         (filterNote.length ? ' after filtering by ' + esc(filterNote.join(' · ')) : '') +
         '. University-specific awards are assessed separately below.</p>' +
+      (wantsMgmt
+        ? '<div class="card card-help" style="margin-top:20px"><p class="label">MORE MANAGEMENT FUNDING IN THE DIRECTORY</p>' +
+          '<p class="small muted" style="margin-top:8px;max-width:66ch">The buckets above only cover awards we have read line by line. ' +
+          'The directory holds a further 1,144 MBA, MiM and management awards from business schools, governments and trusts, ' +
+          'including 1,059 in Europe. Their eligibility is not checked yet, so treat them as leads.</p>' +
+          '<div class="row" style="margin-top:12px">' +
+          '<a class="btn btn-sm btn-primary" href="#/directory/GB">United Kingdom (594)</a>' +
+          '<a class="btn btn-sm" href="#/directory/FR">France (93)</a>' +
+          '<a class="btn btn-sm" href="#/directory/DE">Germany (90)</a>' +
+          '<a class="btn btn-sm" href="#/directory/ES">Spain (82)</a>' +
+          '<a class="btn btn-sm" href="#/directory">All destinations</a></div>' +
+          '<p class="small dim" style="margin-top:10px">Use the "MBA and management" button on any destination to filter to them.</p></div>'
+        : '') +
       '<div class="grid grid-3" style="margin-top:24px">' +
         order.slice(0, 3).map(function (k) {
           return '<div class="card card-tight"><p class="count">' + out.buckets[k].length + '</p><p class="label" style="margin-top:4px">' + esc(BUCKET_META[k].title) + '</p></div>';
@@ -1241,7 +1281,7 @@
   }
 
   /** #/directory/<CC> — searchable, paginated, bounded DOM. */
-  var dirState = { cc: null, q: '', level: '', page: 0, per: 50 };
+  var dirState = { cc: null, q: '', level: '', page: 0, per: 50, mgmt: false };
 
   function directoryCountryPage(cc) {
     cc = decodeURIComponent(cc);
@@ -1253,11 +1293,12 @@
     var meta = shardMeta(cc);
     if (!meta) return notFoundPage('/directory/' + cc);
     var label = cc === 'XX' ? 'awards not tied to one country' : cname(cc);
-    if (dirState.cc !== cc) { dirState = { cc: cc, q: '', level: '', page: 0, per: 50 }; }
+    if (dirState.cc !== cc) { dirState = { cc: cc, q: '', level: '', page: 0, per: 50, mgmt: false }; }
 
     function draw(rows) {
       var q = dirState.q.toLowerCase();
       var list = rows.filter(function (l) {
+        if (dirState.mgmt && !l.management) return false;
         if (dirState.level && (l.study_levels || []).indexOf(dirState.level) < 0) return false;
         if (!q) return true;
         return ((l.name || '') + ' ' + (l.funder_name || '') + ' ' + (l.summary || '')).toLowerCase().indexOf(q) >= 0;
@@ -1289,13 +1330,22 @@
       var ctr = el('dirControls');
       if (ctr && !ctr.getAttribute('data-ready')) {
         ctr.setAttribute('data-ready', '1');
+        var mgmtCount = rows.filter(function (l) { return l.management; }).length;
         ctr.innerHTML =
           '<input id="dirQ" class="data" placeholder="Search name, funder or description" style="min-width:280px">' +
           '<select id="dirL" class="data"><option value="">Any level</option>' +
           Object.keys(levels).sort().map(function (k) {
             return '<option value="' + esc(k) + '">' + esc(levelLabel(k)) + '</option>';
-          }).join('') + '</select>';
-        var qi = el('dirQ'), li = el('dirL'), t;
+          }).join('') +
+          '</select>' +
+          (mgmtCount ? '<button type="button" class="btn btn-sm cal-scope" id="dirM"' +
+            (dirState.mgmt ? ' aria-pressed="true"' : '') + '>MBA and management (' + mgmtCount + ')</button>' : '');
+        var qi = el('dirQ'), li = el('dirL'), mi = el('dirM'), t;
+        if (mi) mi.onclick = function () {
+          dirState.mgmt = !dirState.mgmt;
+          mi.setAttribute('aria-pressed', String(dirState.mgmt));
+          dirState.page = 0; draw(rows);
+        };
         qi.value = dirState.q;
         qi.oninput = function () {
           clearTimeout(t);

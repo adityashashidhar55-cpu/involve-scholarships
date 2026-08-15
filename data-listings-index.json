@@ -1,162 +1,167 @@
 {
  "generated_at": "2026-08-15T00:00:00.000Z",
- "total": 29740,
- "countries": 47,
- "sources": 622,
+ "total": 30837,
+ "countries": 55,
+ "sources": 774,
  "shards": [
   {
    "country": "US",
-   "count": 9770,
+   "count": 9771,
    "parts": [
     {
      "file": "data-listings-US-1.json",
      "count": 1500,
-     "gzip": 150598
+     "gzip": 151038
     },
     {
      "file": "data-listings-US-2.json",
      "count": 1500,
-     "gzip": 145050
+     "gzip": 145742
     },
     {
      "file": "data-listings-US-3.json",
      "count": 1500,
-     "gzip": 130716
+     "gzip": 131075
     },
     {
      "file": "data-listings-US-4.json",
      "count": 1500,
-     "gzip": 141574
+     "gzip": 142240
     },
     {
      "file": "data-listings-US-5.json",
      "count": 1500,
-     "gzip": 145353
+     "gzip": 145897
     },
     {
      "file": "data-listings-US-6.json",
      "count": 1500,
-     "gzip": 148514
+     "gzip": 149055
     },
     {
      "file": "data-listings-US-7.json",
-     "count": 770,
-     "gzip": 76794
+     "count": 771,
+     "gzip": 77153
     }
    ],
-   "gzip": 938599
+   "gzip": 942200
   },
   {
    "country": "CA",
-   "count": 7591,
+   "count": 7592,
    "parts": [
     {
      "file": "data-listings-CA-1.json",
      "count": 1500,
-     "gzip": 176094
+     "gzip": 176893
     },
     {
      "file": "data-listings-CA-2.json",
      "count": 1500,
-     "gzip": 173608
+     "gzip": 174275
     },
     {
      "file": "data-listings-CA-3.json",
      "count": 1500,
-     "gzip": 171448
+     "gzip": 172293
     },
     {
      "file": "data-listings-CA-4.json",
      "count": 1500,
-     "gzip": 172227
+     "gzip": 172951
     },
     {
      "file": "data-listings-CA-5.json",
      "count": 1500,
-     "gzip": 172816
+     "gzip": 173325
     },
     {
      "file": "data-listings-CA-6.json",
-     "count": 91,
-     "gzip": 10806
+     "count": 92,
+     "gzip": 11007
     }
    ],
-   "gzip": 876999
+   "gzip": 880744
   },
   {
    "country": "AU",
-   "count": 3922,
+   "count": 3924,
    "parts": [
     {
      "file": "data-listings-AU-1.json",
      "count": 1500,
-     "gzip": 107775
+     "gzip": 107910
     },
     {
      "file": "data-listings-AU-2.json",
      "count": 1500,
-     "gzip": 101234
+     "gzip": 101513
     },
     {
      "file": "data-listings-AU-3.json",
-     "count": 922,
-     "gzip": 66264
+     "count": 924,
+     "gzip": 66512
     }
    ],
-   "gzip": 275273
+   "gzip": 275935
   },
   {
    "country": "XX",
-   "count": 2303,
+   "count": 2363,
    "parts": [
     {
      "file": "data-listings-XX-1.json",
      "count": 1500,
-     "gzip": 107890
+     "gzip": 110371
     },
     {
      "file": "data-listings-XX-2.json",
-     "count": 803,
-     "gzip": 65740
+     "count": 863,
+     "gzip": 70855
     }
    ],
-   "gzip": 173630
+   "gzip": 181226
   },
   {
    "country": "GB",
-   "count": 1303,
+   "count": 1858,
    "parts": [
     {
      "file": "data-listings-GB-1.json",
-     "count": 1303,
-     "gzip": 142562
+     "count": 1500,
+     "gzip": 138554
+    },
+    {
+     "file": "data-listings-GB-2.json",
+     "count": 358,
+     "gzip": 42904
     }
    ],
-   "gzip": 142562
+   "gzip": 181458
   },
   {
    "country": "FR",
-   "count": 820,
+   "count": 913,
    "parts": [
     {
      "file": "data-listings-FR-1.json",
-     "count": 820,
-     "gzip": 100409
+     "count": 913,
+     "gzip": 111840
     }
    ],
-   "gzip": 100409
+   "gzip": 111840
   },
   {
    "country": "NZ",
-   "count": 724,
+   "count": 725,
    "parts": [
     {
      "file": "data-listings-NZ-1.json",
-     "count": 724,
-     "gzip": 42616
+     "count": 725,
+     "gzip": 42866
     }
    ],
-   "gzip": 42616
+   "gzip": 42866
   },
   {
    "country": "SG",
@@ -165,22 +170,46 @@
     {
      "file": "data-listings-SG-1.json",
      "count": 535,
-     "gzip": 27898
+     "gzip": 28014
     }
    ],
-   "gzip": 27898
+   "gzip": 28014
   },
   {
    "country": "NL",
-   "count": 355,
+   "count": 391,
    "parts": [
     {
      "file": "data-listings-NL-1.json",
-     "count": 355,
-     "gzip": 34917
+     "count": 391,
+     "gzip": 39226
     }
    ],
-   "gzip": 34917
+   "gzip": 39226
+  },
+  {
+   "country": "DE",
+   "count": 345,
+   "parts": [
+    {
+     "file": "data-listings-DE-1.json",
+     "count": 345,
+     "gzip": 29971
+    }
+   ],
+   "gzip": 29971
+  },
+  {
+   "country": "ES",
+   "count": 314,
+   "parts": [
+    {
+     "file": "data-listings-ES-1.json",
+     "count": 314,
+     "gzip": 28993
+    }
+   ],
+   "gzip": 28993
   },
   {
    "country": "ZA",
@@ -189,70 +218,58 @@
     {
      "file": "data-listings-ZA-1.json",
      "count": 272,
-     "gzip": 25406
+     "gzip": 25492
     }
    ],
-   "gzip": 25406
+   "gzip": 25492
   },
   {
    "country": "PL",
-   "count": 266,
+   "count": 268,
    "parts": [
     {
      "file": "data-listings-PL-1.json",
-     "count": 266,
-     "gzip": 16164
+     "count": 268,
+     "gzip": 16398
     }
    ],
-   "gzip": 16164
-  },
-  {
-   "country": "DE",
-   "count": 255,
-   "parts": [
-    {
-     "file": "data-listings-DE-1.json",
-     "count": 255,
-     "gzip": 22079
-    }
-   ],
-   "gzip": 22079
-  },
-  {
-   "country": "ES",
-   "count": 232,
-   "parts": [
-    {
-     "file": "data-listings-ES-1.json",
-     "count": 232,
-     "gzip": 17517
-    }
-   ],
-   "gzip": 17517
+   "gzip": 16398
   },
   {
    "country": "CZ",
-   "count": 165,
+   "count": 166,
    "parts": [
     {
      "file": "data-listings-CZ-1.json",
-     "count": 165,
-     "gzip": 15932
+     "count": 166,
+     "gzip": 16178
     }
    ],
-   "gzip": 15932
+   "gzip": 16178
   },
   {
    "country": "SE",
-   "count": 139,
+   "count": 150,
    "parts": [
     {
      "file": "data-listings-SE-1.json",
-     "count": 139,
-     "gzip": 14368
+     "count": 150,
+     "gzip": 15772
     }
    ],
-   "gzip": 14368
+   "gzip": 15772
+  },
+  {
+   "country": "IE",
+   "count": 146,
+   "parts": [
+    {
+     "file": "data-listings-IE-1.json",
+     "count": 146,
+     "gzip": 15452
+    }
+   ],
+   "gzip": 15452
   },
   {
    "country": "HK",
@@ -261,10 +278,34 @@
     {
      "file": "data-listings-HK-1.json",
      "count": 131,
-     "gzip": 11000
+     "gzip": 11030
     }
    ],
-   "gzip": 11000
+   "gzip": 11030
+  },
+  {
+   "country": "BE",
+   "count": 109,
+   "parts": [
+    {
+     "file": "data-listings-BE-1.json",
+     "count": 109,
+     "gzip": 9368
+    }
+   ],
+   "gzip": 9368
+  },
+  {
+   "country": "IT",
+   "count": 105,
+   "parts": [
+    {
+     "file": "data-listings-IT-1.json",
+     "count": 105,
+     "gzip": 13266
+    }
+   ],
+   "gzip": 13266
   },
   {
    "country": "PE",
@@ -273,70 +314,34 @@
     {
      "file": "data-listings-PE-1.json",
      "count": 103,
-     "gzip": 6269
+     "gzip": 6299
     }
    ],
-   "gzip": 6269
-  },
-  {
-   "country": "IE",
-   "count": 100,
-   "parts": [
-    {
-     "file": "data-listings-IE-1.json",
-     "count": 100,
-     "gzip": 11092
-    }
-   ],
-   "gzip": 11092
-  },
-  {
-   "country": "BE",
-   "count": 96,
-   "parts": [
-    {
-     "file": "data-listings-BE-1.json",
-     "count": 96,
-     "gzip": 7478
-    }
-   ],
-   "gzip": 7478
+   "gzip": 6299
   },
   {
    "country": "JP",
-   "count": 84,
+   "count": 85,
    "parts": [
     {
      "file": "data-listings-JP-1.json",
-     "count": 84,
-     "gzip": 6780
+     "count": 85,
+     "gzip": 6936
     }
    ],
-   "gzip": 6780
-  },
-  {
-   "country": "IT",
-   "count": 76,
-   "parts": [
-    {
-     "file": "data-listings-IT-1.json",
-     "count": 76,
-     "gzip": 9775
-    }
-   ],
-   "gzip": 9775
+   "gzip": 6936
   },
   {
    "country": "FI",
-   "count": 67,
+   "count": 69,
    "parts": [
     {
      "file": "data-listings-FI-1.json",
-     "count": 67,
-     "gzip": 6280
+     "count": 69,
+     "gzip": 6493
     }
    ],
-   "gzip": 6280
+   "gzip": 6493
   },
   {
    "country": "MX",
@@ -345,10 +350,10 @@
     {
      "file": "data-listings-MX-1.json",
      "count": 54,
-     "gzip": 5364
+     "gzip": 5389
     }
    ],
-   "gzip": 5364
+   "gzip": 5389
   },
   {
    "country": "BR",
@@ -357,10 +362,10 @@
     {
      "file": "data-listings-BR-1.json",
      "count": 51,
-     "gzip": 6834
+     "gzip": 6863
     }
    ],
-   "gzip": 6834
+   "gzip": 6863
   },
   {
    "country": "AR",
@@ -369,22 +374,46 @@
     {
      "file": "data-listings-AR-1.json",
      "count": 44,
-     "gzip": 5012
+     "gzip": 5029
     }
    ],
-   "gzip": 5012
+   "gzip": 5029
   },
   {
    "country": "IN",
-   "count": 34,
+   "count": 36,
    "parts": [
     {
      "file": "data-listings-IN-1.json",
-     "count": 34,
-     "gzip": 2965
+     "count": 36,
+     "gzip": 3222
     }
    ],
-   "gzip": 2965
+   "gzip": 3222
+  },
+  {
+   "country": "CH",
+   "count": 34,
+   "parts": [
+    {
+     "file": "data-listings-CH-1.json",
+     "count": 34,
+     "gzip": 4939
+    }
+   ],
+   "gzip": 4939
+  },
+  {
+   "country": "PT",
+   "count": 34,
+   "parts": [
+    {
+     "file": "data-listings-PT-1.json",
+     "count": 34,
+     "gzip": 4253
+    }
+   ],
+   "gzip": 4253
   },
   {
    "country": "LT",
@@ -393,58 +422,58 @@
     {
      "file": "data-listings-LT-1.json",
      "count": 32,
-     "gzip": 3408
+     "gzip": 3416
     }
    ],
-   "gzip": 3408
-  },
-  {
-   "country": "PT",
-   "count": 29,
-   "parts": [
-    {
-     "file": "data-listings-PT-1.json",
-     "count": 29,
-     "gzip": 3575
-    }
-   ],
-   "gzip": 3575
+   "gzip": 3416
   },
   {
    "country": "HU",
-   "count": 27,
+   "count": 28,
    "parts": [
     {
      "file": "data-listings-HU-1.json",
-     "count": 27,
-     "gzip": 3106
+     "count": 28,
+     "gzip": 3218
     }
    ],
-   "gzip": 3106
+   "gzip": 3218
   },
   {
    "country": "DK",
-   "count": 24,
+   "count": 27,
    "parts": [
     {
      "file": "data-listings-DK-1.json",
-     "count": 24,
-     "gzip": 2670
+     "count": 27,
+     "gzip": 3058
     }
    ],
-   "gzip": 2670
+   "gzip": 3058
   },
   {
    "country": "CN",
-   "count": 20,
+   "count": 23,
    "parts": [
     {
      "file": "data-listings-CN-1.json",
-     "count": 20,
-     "gzip": 2437
+     "count": 23,
+     "gzip": 2725
     }
    ],
-   "gzip": 2437
+   "gzip": 2725
+  },
+  {
+   "country": "NO",
+   "count": 22,
+   "parts": [
+    {
+     "file": "data-listings-NO-1.json",
+     "count": 22,
+     "gzip": 2495
+    }
+   ],
+   "gzip": 2495
   },
   {
    "country": "CL",
@@ -453,10 +482,10 @@
     {
      "file": "data-listings-CL-1.json",
      "count": 19,
-     "gzip": 2710
+     "gzip": 2731
     }
    ],
-   "gzip": 2710
+   "gzip": 2731
   },
   {
    "country": "GR",
@@ -465,22 +494,22 @@
     {
      "file": "data-listings-GR-1.json",
      "count": 18,
-     "gzip": 2879
+     "gzip": 2893
     }
    ],
-   "gzip": 2879
+   "gzip": 2893
   },
   {
    "country": "AT",
-   "count": 13,
+   "count": 14,
    "parts": [
     {
      "file": "data-listings-AT-1.json",
-     "count": 13,
-     "gzip": 1151
+     "count": 14,
+     "gzip": 1276
     }
    ],
-   "gzip": 1151
+   "gzip": 1276
   },
   {
    "country": "CO",
@@ -489,58 +518,46 @@
     {
      "file": "data-listings-CO-1.json",
      "count": 12,
-     "gzip": 1833
+     "gzip": 1849
     }
    ],
-   "gzip": 1833
-  },
-  {
-   "country": "NO",
-   "count": 12,
-   "parts": [
-    {
-     "file": "data-listings-NO-1.json",
-     "count": 12,
-     "gzip": 1369
-    }
-   ],
-   "gzip": 1369
+   "gzip": 1849
   },
   {
    "country": "KR",
-   "count": 11,
+   "count": 12,
    "parts": [
     {
      "file": "data-listings-KR-1.json",
-     "count": 11,
-     "gzip": 1984
+     "count": 12,
+     "gzip": 2114
     }
    ],
-   "gzip": 1984
+   "gzip": 2114
   },
   {
    "country": "TW",
-   "count": 10,
+   "count": 11,
    "parts": [
     {
      "file": "data-listings-TW-1.json",
-     "count": 10,
-     "gzip": 1008
+     "count": 11,
+     "gzip": 1135
     }
    ],
-   "gzip": 1008
+   "gzip": 1135
   },
   {
    "country": "TR",
-   "count": 7,
+   "count": 8,
    "parts": [
     {
      "file": "data-listings-TR-1.json",
-     "count": 7,
-     "gzip": 990
+     "count": 8,
+     "gzip": 1153
     }
    ],
-   "gzip": 990
+   "gzip": 1153
   },
   {
    "country": "EE",
@@ -549,10 +566,10 @@
     {
      "file": "data-listings-EE-1.json",
      "count": 4,
-     "gzip": 528
+     "gzip": 540
     }
    ],
-   "gzip": 528
+   "gzip": 540
   },
   {
    "country": "MY",
@@ -567,16 +584,40 @@
    "gzip": 1012
   },
   {
-   "country": "CH",
+   "country": "IS",
    "count": 2,
    "parts": [
     {
-     "file": "data-listings-CH-1.json",
+     "file": "data-listings-IS-1.json",
      "count": 2,
-     "gzip": 734
+     "gzip": 504
     }
    ],
-   "gzip": 734
+   "gzip": 504
+  },
+  {
+   "country": "SA",
+   "count": 2,
+   "parts": [
+    {
+     "file": "data-listings-SA-1.json",
+     "count": 2,
+     "gzip": 566
+    }
+   ],
+   "gzip": 566
+  },
+  {
+   "country": "QA",
+   "count": 2,
+   "parts": [
+    {
+     "file": "data-listings-QA-1.json",
+     "count": 2,
+     "gzip": 476
+    }
+   ],
+   "gzip": 476
   },
   {
    "country": "LV",
@@ -585,10 +626,10 @@
     {
      "file": "data-listings-LV-1.json",
      "count": 2,
-     "gzip": 517
+     "gzip": 529
     }
    ],
-   "gzip": 517
+   "gzip": 529
   },
   {
    "country": "BZ",
@@ -627,16 +668,76 @@
    "gzip": 539
   },
   {
-   "country": "IS",
+   "country": "RO",
    "count": 1,
    "parts": [
     {
-     "file": "data-listings-IS-1.json",
+     "file": "data-listings-RO-1.json",
      "count": 1,
-     "gzip": 395
+     "gzip": 393
     }
    ],
-   "gzip": 395
+   "gzip": 393
+  },
+  {
+   "country": "SK",
+   "count": 1,
+   "parts": [
+    {
+     "file": "data-listings-SK-1.json",
+     "count": 1,
+     "gzip": 443
+    }
+   ],
+   "gzip": 443
+  },
+  {
+   "country": "BN",
+   "count": 1,
+   "parts": [
+    {
+     "file": "data-listings-BN-1.json",
+     "count": 1,
+     "gzip": 390
+    }
+   ],
+   "gzip": 390
+  },
+  {
+   "country": "TH",
+   "count": 1,
+   "parts": [
+    {
+     "file": "data-listings-TH-1.json",
+     "count": 1,
+     "gzip": 387
+    }
+   ],
+   "gzip": 387
+  },
+  {
+   "country": "KW",
+   "count": 1,
+   "parts": [
+    {
+     "file": "data-listings-KW-1.json",
+     "count": 1,
+     "gzip": 388
+    }
+   ],
+   "gzip": 388
+  },
+  {
+   "country": "AE",
+   "count": 1,
+   "parts": [
+    {
+     "file": "data-listings-AE-1.json",
+     "count": 1,
+     "gzip": 375
+    }
+   ],
+   "gzip": 375
   }
  ]
 }
