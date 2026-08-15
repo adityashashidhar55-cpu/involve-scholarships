@@ -516,19 +516,32 @@
     var years = deadlineYears();
 
     return '' +
-    '<section class="wrap section">' +
+    '<div class="band-cream"><section class="wrap section">' +
       '<p class="eyebrow">INVOLVE SCHOLARSHIPS</p>' +
       '<h1 style="margin-top:10px;max-width:16ch">Find the funding you are actually eligible for.</h1>' +
       '<p class="muted" style="margin-top:18px;max-width:62ch">Government, foundation and multilateral scholarships — the awards you apply for directly, on your own merits. Every one is read from the funder\u2019s official page, quotes their exact wording, and shows the date we last checked it. Where a funder has not published something, we say so instead of guessing.</p>' +
-      '<div class="row" style="margin-top:26px"><a class="btn btn-primary" href="#intake">Match my profile</a>' +
+      '<div class="row" style="margin-top:26px"><a class="btn btn-primary" href="#/intake">Match my profile</a>' +
       '<a class="btn" href="#/explore">Browse all funding</a><a class="btn" href="#/directory">Funding directory</a></div>' +
       '<div class="grid grid-3" style="margin-top:44px">' +
         statTile(GENERAL.length, 'government & private awards') +
         statTile(GENERAL.filter(function (r) { return r.status === 'open'; }).length, 'currently open') +
         statTile(COLLEGE.length || '—', 'university-run, listed separately') +
       '</div>' +
-    '</section>' +
+    '</section>';
+  }
 
+  /**
+   * The questionnaire on its own route. It used to be an anchor on the home
+   * page (`#intake`), which the hash router mistook for a path and bounced
+   * between `#/` and `#intake` forever — the CTA appeared dead.
+   */
+  function intakePage() {
+    var p = loadProfile() || {};
+    var years = deadlineYears();
+    return '' +
+    '<section class="wrap section">' +
+      '<p class="small"><a href="#/">Home</a> <span class="dim">/</span> Your profile</p>' +
+    '</section>' +
     '<section class="wrap section" id="intake" style="border-top:1px solid var(--hairline)">' +
       '<p class="eyebrow">INTAKE</p>' +
       '<h2 style="margin-top:10px">The more you tell us, the fewer false hopes</h2>' +
@@ -618,10 +631,41 @@
           '<div><p class="label">Willing to return home after graduating?</p>' + tri('willing_to_return_home', p.willing_to_return_home, 'Yes', 'No') + '</div>' +
         '</div>') +
 
-      '<div class="row" style="margin-top:28px"><button class="btn btn-primary" type="submit">See my four buckets</button>' +
+      '<div class="row" style="margin-top:28px"><button class="btn btn-primary" type="submit">Show my scholarships</button>' +
       '<span class="small dim">Nothing leaves your browser.</span></div>' +
       '</form>' +
     '</section>';
+  }
+
+
+  /**
+   * Awards routinely ask for a motivation letter, a personal statement or a CV.
+   * Point people at the Involve services that do exactly that rather than
+   * leaving them to work it out.
+   */
+  var DOC_LETTER = /(cover letter|motivation letter|motivational letter|letter of motivation|personal statement|statement of purpose|essay|writing sample|letter of intent)/i;
+  var DOC_CV = /\b(cv|r[ée]sum[ée]|curriculum vitae)\b/i;
+
+  function documentHelp(s) {
+    var items = (s && s.requirements) || [];
+    var text = items.map(function (r) { return (r.item || '') + ' ' + (r.spec || ''); }).join(' ');
+    var wantsLetter = DOC_LETTER.test(text);
+    var wantsCv = DOC_CV.test(text);
+    if (!wantsLetter && !wantsCv) return '';
+    var needs = [];
+    if (wantsLetter) needs.push('a written statement');
+    if (wantsCv) needs.push('a CV');
+    return '<div class="card card-help" style="margin-top:24px">' +
+      '<p class="label">THIS ONE ASKS FOR ' + esc(needs.join(' AND ').toUpperCase()) + '</p>' +
+      '<p class="small muted" style="margin-top:8px;max-width:66ch">The funder decides on what you write, not just on your grades. ' +
+      'If you would like help with that part:</p>' +
+      '<div class="row" style="margin-top:14px">' +
+        (wantsLetter ? '<a class="btn btn-sm" href="https://involve-consulting.com/contact-us/" target="_blank" rel="noopener">Help with the letter</a>' : '') +
+        (wantsCv ? '<a class="btn btn-sm" href="https://involveresume.com" target="_blank" rel="noopener">Help with the CV</a>' : '') +
+        '<a class="btn btn-sm btn-primary" href="https://involve-consulting.com/contact-us/" target="_blank" rel="noopener">Full application guidance</a>' +
+      '</div>' +
+      '<p class="small dim" style="margin-top:12px">Involve Consulting can take you through the whole application, not just the documents. The scholarship itself is free to browse and always will be.</p>' +
+      '</div>';
   }
 
   function statTile(n, label) {
@@ -670,7 +714,7 @@
     if (!p || !p.nationality || !p.study_level) {
       return '<div class="wrap section"><p class="eyebrow">NO PROFILE YET</p><h1>Tell us who you are first</h1>' +
         '<p class="muted" style="margin-top:14px;max-width:58ch">The four buckets are computed against your profile. Nationality and study level are the minimum.</p>' +
-        '<div class="row" style="margin-top:22px"><a class="btn btn-primary" href="#intake">Start the intake</a></div></div>';
+        '<div class="row" style="margin-top:22px"><a class="btn btn-primary" href="#/intake">Start the intake</a></div></div>';
     }
 
     var generalPool = applyFilters(GENERAL, p);
@@ -693,7 +737,7 @@
     var html = '<div class="wrap section">' +
       '<p class="eyebrow">YOUR MATCH</p>' +
       '<h1 style="margin-top:10px">Four buckets, never one list</h1>' +
-      '<div class="row" style="margin-top:16px">' + profileChips(p) + '<a class="btn btn-sm" href="#intake">Edit profile</a></div>' +
+      '<div class="row" style="margin-top:16px">' + profileChips(p) + '<a class="btn btn-sm" href="#/intake">Edit profile</a></div>' +
       '<p class="small dim" style="margin-top:12px">' + generalPool.length + ' of ' + GENERAL.length + ' open-pool records assessed' +
         (filterNote.length ? ' after filtering by ' + esc(filterNote.join(' · ')) : '') +
         '. University-specific awards are assessed separately below.</p>' +
@@ -837,7 +881,8 @@
         (s.application_url ? '<a class="btn btn-primary" href="' + esc(s.application_url) + '" target="_blank" rel="noreferrer">Apply on the official page</a>' : '') +
         '<button class="btn" data-save="' + esc(s.slug) + '">' + (saved ? 'Saved ✓' : 'Save to my calendar') + '</button></div>' +
 
-      (mine ? verdictBlock(mine) : '<div class="banner" style="margin-top:26px"><p class="label">NO PROFILE YET</p><p class="muted" style="margin-top:8px">Fill in the intake and every rule below is ticked against you. <a href="#intake">Start the intake</a>.</p></div>') +
+      (mine ? verdictBlock(mine) : '<div class="banner" style="margin-top:26px"><p class="label">NO PROFILE YET</p><p class="muted" style="margin-top:8px">Fill in the intake and every rule below is ticked against you. <a href="#/intake">Start the intake</a>.</p></div>') +
+      documentHelp(s) +
 
       (need.length ? '<div class="banner" style="margin-top:16px;border-color:var(--steel)"><p class="label" style="color:var(--steel)">NEED-BASED AWARD</p>' +
         '<p class="muted small" style="margin-top:8px;max-width:66ch">This funder assesses financial need in prose, not against a number, so no engine can tell you whether you qualify. What they published:</p>' +
@@ -1371,7 +1416,7 @@
       '<p class="muted" style="margin-top:12px;max-width:64ch">Showing ' + esc(pool.label) +
       ' \u2014 ' + pool.list.length.toLocaleString() + ' award' + (pool.list.length === 1 ? '' : 's') +
       '. Dates are the ones funders published; nothing here is inferred.' +
-      (!pool.hasProfile ? ' <a href="#intake">Tell us about you</a> and this narrows to awards you can actually hold.' : '') +
+      (!pool.hasProfile ? ' <a href="#/intake">Tell us about you</a> and this narrows to awards you can actually hold.' : '') +
       '</p>' +
 
       '<div class="row noprint" style="margin-top:18px">' +
@@ -1620,6 +1665,7 @@
 
   // ------------------------------------------------------------------ routes
   route(/^\/$/, homePage);
+  route(/^\/intake$/, intakePage);
   route(/^\/results$/, resultsPage);
   route(/^\/schools$/, schoolsPage);
   route(/^\/directory$/, directoryPage);
@@ -1631,16 +1677,10 @@
   route(/^\/calendar$/, calendarPage);
   route(/^\/methodology$/, methodologyPage);
 
-  window.addEventListener('hashchange', function () {
-    if (window.location.hash === '#intake') {
-      if (currentPath() !== '/') { window.location.hash = '#/'; setTimeout(function () { window.location.hash = '#intake'; }, 0); return; }
-      var t = el('intake'); if (t) t.scrollIntoView({ behavior: 'smooth' });
-      return;
-    }
-    render();
-  });
+  window.addEventListener('hashchange', render);
 
-  if (window.location.hash === '#intake') window.location.hash = '#/';
+  // Old links and bookmarks pointed at the anchor; send them to the real route.
+  if (window.location.hash === '#intake') window.location.hash = '#/intake';
 
   // ------------------------------------------------------------------- boot
   function start() {

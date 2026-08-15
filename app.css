@@ -235,3 +235,31 @@ details > summary { cursor: pointer; }
   .cal-cell.cal-has .cal-num::after { content: ' \00b7 deadline'; font-weight: 400; color: var(--ink-55); }
   .cal-ev { white-space: normal; }
 }
+
+/* ------------------------------------------------------------ brand + surfaces
+   involve-consulting.com puts a cream band behind its hero and keeps the rest
+   white. Same here: cream where we introduce a section, white where people
+   read. Logo is their own asset so the two sites read as one company. */
+.brand { display: inline-flex; align-items: center; gap: 10px; text-transform: none; }
+.brand-logo { height: 42px; width: auto; display: block; }
+.brand-word {
+  font-family: Montserrat, sans-serif; font-weight: 700; font-size: 1.02rem;
+  letter-spacing: 0.02em; color: var(--ink); text-transform: uppercase;
+}
+.foot-logo { height: 54px; width: auto; display: block; }
+@media (max-width: 620px) {
+  .brand-logo { height: 34px; }
+  .brand-word { display: none; }        /* the mark alone is enough on a phone */
+}
+
+/* Cream hero band, matching theirs. Applied to the first section of the home,
+   intake, directory and calendar pages via .band-cream. */
+.band-cream { background: var(--cream); }
+.band-cream .eyebrow { color: var(--ink-70); }
+.band-wash { background: var(--wash); }
+.card-help { background: var(--cream); border-color: rgba(51, 51, 51, 0.18); }
+
+/* Cards sit on cream in the hero band — give them a white face or the numbers
+   disappear into the background. */
+.band-cream .card { background: var(--paper); border-color: rgba(51, 51, 51, 0.16); }
+.band-cream .btn:not(.btn-primary) { background: var(--paper); }
