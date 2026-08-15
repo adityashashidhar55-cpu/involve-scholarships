@@ -1,0 +1,654 @@
+{
+ "generated_at": "2026-08-15T00:00:00.000Z",
+ "total": 30234,
+ "countries": 48,
+ "sources": 631,
+ "shards": [
+  {
+   "country": "US",
+   "count": 9812,
+   "parts": [
+    {
+     "file": "data-listings-US-1.json",
+     "count": 1500,
+     "gzip": 150510
+    },
+    {
+     "file": "data-listings-US-2.json",
+     "count": 1500,
+     "gzip": 145611
+    },
+    {
+     "file": "data-listings-US-3.json",
+     "count": 1500,
+     "gzip": 130807
+    },
+    {
+     "file": "data-listings-US-4.json",
+     "count": 1500,
+     "gzip": 141725
+    },
+    {
+     "file": "data-listings-US-5.json",
+     "count": 1500,
+     "gzip": 145525
+    },
+    {
+     "file": "data-listings-US-6.json",
+     "count": 1500,
+     "gzip": 148626
+    },
+    {
+     "file": "data-listings-US-7.json",
+     "count": 812,
+     "gzip": 81602
+    }
+   ],
+   "gzip": 944406
+  },
+  {
+   "country": "CA",
+   "count": 7613,
+   "parts": [
+    {
+     "file": "data-listings-CA-1.json",
+     "count": 1500,
+     "gzip": 175633
+    },
+    {
+     "file": "data-listings-CA-2.json",
+     "count": 1500,
+     "gzip": 173630
+    },
+    {
+     "file": "data-listings-CA-3.json",
+     "count": 1500,
+     "gzip": 172605
+    },
+    {
+     "file": "data-listings-CA-4.json",
+     "count": 1500,
+     "gzip": 171695
+    },
+    {
+     "file": "data-listings-CA-5.json",
+     "count": 1500,
+     "gzip": 172044
+    },
+    {
+     "file": "data-listings-CA-6.json",
+     "count": 113,
+     "gzip": 13350
+    }
+   ],
+   "gzip": 878957
+  },
+  {
+   "country": "AU",
+   "count": 3951,
+   "parts": [
+    {
+     "file": "data-listings-AU-1.json",
+     "count": 1500,
+     "gzip": 108635
+    },
+    {
+     "file": "data-listings-AU-2.json",
+     "count": 1500,
+     "gzip": 100711
+    },
+    {
+     "file": "data-listings-AU-3.json",
+     "count": 951,
+     "gzip": 69459
+    }
+   ],
+   "gzip": 278805
+  },
+  {
+   "country": "XX",
+   "count": 2331,
+   "parts": [
+    {
+     "file": "data-listings-XX-1.json",
+     "count": 1500,
+     "gzip": 109762
+    },
+    {
+     "file": "data-listings-XX-2.json",
+     "count": 831,
+     "gzip": 68308
+    }
+   ],
+   "gzip": 178070
+  },
+  {
+   "country": "GB",
+   "count": 1329,
+   "parts": [
+    {
+     "file": "data-listings-GB-1.json",
+     "count": 1329,
+     "gzip": 144753
+    }
+   ],
+   "gzip": 144753
+  },
+  {
+   "country": "FR",
+   "count": 853,
+   "parts": [
+    {
+     "file": "data-listings-FR-1.json",
+     "count": 853,
+     "gzip": 104417
+    }
+   ],
+   "gzip": 104417
+  },
+  {
+   "country": "NZ",
+   "count": 724,
+   "parts": [
+    {
+     "file": "data-listings-NZ-1.json",
+     "count": 724,
+     "gzip": 42616
+    }
+   ],
+   "gzip": 42616
+  },
+  {
+   "country": "SG",
+   "count": 536,
+   "parts": [
+    {
+     "file": "data-listings-SG-1.json",
+     "count": 536,
+     "gzip": 27970
+    }
+   ],
+   "gzip": 27970
+  },
+  {
+   "country": "NL",
+   "count": 409,
+   "parts": [
+    {
+     "file": "data-listings-NL-1.json",
+     "count": 409,
+     "gzip": 39476
+    }
+   ],
+   "gzip": 39476
+  },
+  {
+   "country": "ZA",
+   "count": 320,
+   "parts": [
+    {
+     "file": "data-listings-ZA-1.json",
+     "count": 320,
+     "gzip": 28899
+    }
+   ],
+   "gzip": 28899
+  },
+  {
+   "country": "PL",
+   "count": 282,
+   "parts": [
+    {
+     "file": "data-listings-PL-1.json",
+     "count": 282,
+     "gzip": 17136
+    }
+   ],
+   "gzip": 17136
+  },
+  {
+   "country": "DE",
+   "count": 255,
+   "parts": [
+    {
+     "file": "data-listings-DE-1.json",
+     "count": 255,
+     "gzip": 22079
+    }
+   ],
+   "gzip": 22079
+  },
+  {
+   "country": "ES",
+   "count": 233,
+   "parts": [
+    {
+     "file": "data-listings-ES-1.json",
+     "count": 233,
+     "gzip": 17707
+    }
+   ],
+   "gzip": 17707
+  },
+  {
+   "country": "CZ",
+   "count": 199,
+   "parts": [
+    {
+     "file": "data-listings-CZ-1.json",
+     "count": 199,
+     "gzip": 17832
+    }
+   ],
+   "gzip": 17832
+  },
+  {
+   "country": "HK",
+   "count": 169,
+   "parts": [
+    {
+     "file": "data-listings-HK-1.json",
+     "count": 169,
+     "gzip": 15008
+    }
+   ],
+   "gzip": 15008
+  },
+  {
+   "country": "SE",
+   "count": 168,
+   "parts": [
+    {
+     "file": "data-listings-SE-1.json",
+     "count": 168,
+     "gzip": 16195
+    }
+   ],
+   "gzip": 16195
+  },
+  {
+   "country": "PE",
+   "count": 128,
+   "parts": [
+    {
+     "file": "data-listings-PE-1.json",
+     "count": 128,
+     "gzip": 7308
+    }
+   ],
+   "gzip": 7308
+  },
+  {
+   "country": "IE",
+   "count": 100,
+   "parts": [
+    {
+     "file": "data-listings-IE-1.json",
+     "count": 100,
+     "gzip": 11092
+    }
+   ],
+   "gzip": 11092
+  },
+  {
+   "country": "BE",
+   "count": 96,
+   "parts": [
+    {
+     "file": "data-listings-BE-1.json",
+     "count": 96,
+     "gzip": 7478
+    }
+   ],
+   "gzip": 7478
+  },
+  {
+   "country": "JP",
+   "count": 85,
+   "parts": [
+    {
+     "file": "data-listings-JP-1.json",
+     "count": 85,
+     "gzip": 6859
+    }
+   ],
+   "gzip": 6859
+  },
+  {
+   "country": "IT",
+   "count": 82,
+   "parts": [
+    {
+     "file": "data-listings-IT-1.json",
+     "count": 82,
+     "gzip": 10418
+    }
+   ],
+   "gzip": 10418
+  },
+  {
+   "country": "FI",
+   "count": 71,
+   "parts": [
+    {
+     "file": "data-listings-FI-1.json",
+     "count": 71,
+     "gzip": 6684
+    }
+   ],
+   "gzip": 6684
+  },
+  {
+   "country": "MX",
+   "count": 66,
+   "parts": [
+    {
+     "file": "data-listings-MX-1.json",
+     "count": 66,
+     "gzip": 6024
+    }
+   ],
+   "gzip": 6024
+  },
+  {
+   "country": "AR",
+   "count": 56,
+   "parts": [
+    {
+     "file": "data-listings-AR-1.json",
+     "count": 56,
+     "gzip": 6159
+    }
+   ],
+   "gzip": 6159
+  },
+  {
+   "country": "BR",
+   "count": 53,
+   "parts": [
+    {
+     "file": "data-listings-BR-1.json",
+     "count": 53,
+     "gzip": 7046
+    }
+   ],
+   "gzip": 7046
+  },
+  {
+   "country": "CL",
+   "count": 42,
+   "parts": [
+    {
+     "file": "data-listings-CL-1.json",
+     "count": 42,
+     "gzip": 3838
+    }
+   ],
+   "gzip": 3838
+  },
+  {
+   "country": "IN",
+   "count": 34,
+   "parts": [
+    {
+     "file": "data-listings-IN-1.json",
+     "count": 34,
+     "gzip": 2965
+    }
+   ],
+   "gzip": 2965
+  },
+  {
+   "country": "LT",
+   "count": 32,
+   "parts": [
+    {
+     "file": "data-listings-LT-1.json",
+     "count": 32,
+     "gzip": 3408
+    }
+   ],
+   "gzip": 3408
+  },
+  {
+   "country": "HU",
+   "count": 32,
+   "parts": [
+    {
+     "file": "data-listings-HU-1.json",
+     "count": 32,
+     "gzip": 3605
+    }
+   ],
+   "gzip": 3605
+  },
+  {
+   "country": "PT",
+   "count": 30,
+   "parts": [
+    {
+     "file": "data-listings-PT-1.json",
+     "count": 30,
+     "gzip": 3649
+    }
+   ],
+   "gzip": 3649
+  },
+  {
+   "country": "DK",
+   "count": 24,
+   "parts": [
+    {
+     "file": "data-listings-DK-1.json",
+     "count": 24,
+     "gzip": 2670
+    }
+   ],
+   "gzip": 2670
+  },
+  {
+   "country": "CN",
+   "count": 20,
+   "parts": [
+    {
+     "file": "data-listings-CN-1.json",
+     "count": 20,
+     "gzip": 2437
+    }
+   ],
+   "gzip": 2437
+  },
+  {
+   "country": "GR",
+   "count": 19,
+   "parts": [
+    {
+     "file": "data-listings-GR-1.json",
+     "count": 19,
+     "gzip": 3023
+    }
+   ],
+   "gzip": 3023
+  },
+  {
+   "country": "AT",
+   "count": 13,
+   "parts": [
+    {
+     "file": "data-listings-AT-1.json",
+     "count": 13,
+     "gzip": 1151
+    }
+   ],
+   "gzip": 1151
+  },
+  {
+   "country": "CO",
+   "count": 12,
+   "parts": [
+    {
+     "file": "data-listings-CO-1.json",
+     "count": 12,
+     "gzip": 1833
+    }
+   ],
+   "gzip": 1833
+  },
+  {
+   "country": "NO",
+   "count": 12,
+   "parts": [
+    {
+     "file": "data-listings-NO-1.json",
+     "count": 12,
+     "gzip": 1369
+    }
+   ],
+   "gzip": 1369
+  },
+  {
+   "country": "KR",
+   "count": 11,
+   "parts": [
+    {
+     "file": "data-listings-KR-1.json",
+     "count": 11,
+     "gzip": 1984
+    }
+   ],
+   "gzip": 1984
+  },
+  {
+   "country": "TW",
+   "count": 10,
+   "parts": [
+    {
+     "file": "data-listings-TW-1.json",
+     "count": 10,
+     "gzip": 1008
+    }
+   ],
+   "gzip": 1008
+  },
+  {
+   "country": "TR",
+   "count": 7,
+   "parts": [
+    {
+     "file": "data-listings-TR-1.json",
+     "count": 7,
+     "gzip": 990
+    }
+   ],
+   "gzip": 990
+  },
+  {
+   "country": "EE",
+   "count": 4,
+   "parts": [
+    {
+     "file": "data-listings-EE-1.json",
+     "count": 4,
+     "gzip": 528
+    }
+   ],
+   "gzip": 528
+  },
+  {
+   "country": "MY",
+   "count": 2,
+   "parts": [
+    {
+     "file": "data-listings-MY-1.json",
+     "count": 2,
+     "gzip": 1012
+    }
+   ],
+   "gzip": 1012
+  },
+  {
+   "country": "CH",
+   "count": 2,
+   "parts": [
+    {
+     "file": "data-listings-CH-1.json",
+     "count": 2,
+     "gzip": 734
+    }
+   ],
+   "gzip": 734
+  },
+  {
+   "country": "LV",
+   "count": 2,
+   "parts": [
+    {
+     "file": "data-listings-LV-1.json",
+     "count": 2,
+     "gzip": 517
+    }
+   ],
+   "gzip": 517
+  },
+  {
+   "country": "AG",
+   "count": 1,
+   "parts": [
+    {
+     "file": "data-listings-AG-1.json",
+     "count": 1,
+     "gzip": 572
+    }
+   ],
+   "gzip": 572
+  },
+  {
+   "country": "BZ",
+   "count": 1,
+   "parts": [
+    {
+     "file": "data-listings-BZ-1.json",
+     "count": 1,
+     "gzip": 476
+    }
+   ],
+   "gzip": 476
+  },
+  {
+   "country": "PS",
+   "count": 1,
+   "parts": [
+    {
+     "file": "data-listings-PS-1.json",
+     "count": 1,
+     "gzip": 636
+    }
+   ],
+   "gzip": 636
+  },
+  {
+   "country": "JO",
+   "count": 1,
+   "parts": [
+    {
+     "file": "data-listings-JO-1.json",
+     "count": 1,
+     "gzip": 539
+    }
+   ],
+   "gzip": 539
+  },
+  {
+   "country": "IS",
+   "count": 1,
+   "parts": [
+    {
+     "file": "data-listings-IS-1.json",
+     "count": 1,
+     "gzip": 395
+    }
+   ],
+   "gzip": 395
+  }
+ ]
+}

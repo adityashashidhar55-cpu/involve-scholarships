@@ -55,15 +55,71 @@
    * Pull the university file in when it is actually needed. Safe to call
    * repeatedly; re-renders the current route once the data lands.
    */
+  /**
+   * The directory is sharded by destination. A single file would be 21 MB to
+   * parse and 2.5 MB over the wire, which is exactly what the split-data build
+   * exists to avoid, so nothing here ever loads the whole set.
+   *
+   * ensureListings()      -> the index only (counts per destination), tiny
+   * ensureCountry(cc, cb) -> that destination's shards; part 1 resolves first
+   *                          and the rest stream in behind it
+   */
+  var LISTING_INDEX = null, indexLoading = false;
+  var COUNTRY_ROWS = {};      // cc -> array (carries _complete / _total)
+
   function ensureListings(then) {
     if (listingsLoaded) { if (then) then(); return; }
-    listingsLoaded = true;
-    if (window.INVOLVE_LISTINGS) { LISTINGS = window.INVOLVE_LISTINGS.listings || []; if (then) then(); return; }
-    if (!window.fetch) { if (then) then(); return; }
-    window.fetch('data-listings.json' + DATA_V)
+    if (indexLoading) return;
+    indexLoading = true;
+    if (window.INVOLVE_LISTINGS) {
+      LISTINGS = window.INVOLVE_LISTINGS.listings || [];
+      listingsLoaded = true; if (then) then(); return;
+    }
+    if (!window.fetch) { listingsLoaded = true; if (then) then(); return; }
+    window.fetch('data-listings-index.json' + DATA_V)
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (pack) { if (pack) { LISTINGS = pack.listings || []; render(); } if (then) then(); })
-      .catch(function () { if (then) then(); });
+      .then(function (j) {
+        if (j) { LISTING_INDEX = j; listingsLoaded = true; render(); }
+        if (then) then();
+      })
+      .catch(function () { listingsLoaded = true; if (then) then(); });
+  }
+
+  function shardMeta(cc) {
+    if (!LISTING_INDEX) return null;
+    for (var i = 0; i < LISTING_INDEX.shards.length; i++) {
+      if (LISTING_INDEX.shards[i].country === cc) return LISTING_INDEX.shards[i];
+    }
+    return null;
+  }
+
+  function ensureCountry(cc, onReady, onMore) {
+    var have = COUNTRY_ROWS[cc];
+    if (have && have._complete) { onReady(have); return; }
+    if (have && have._loading) return;
+    var meta = shardMeta(cc);
+    if (!meta || !window.fetch) { onReady([]); return; }
+    var rows = COUNTRY_ROWS[cc] = [];
+    rows._loading = true; rows._total = meta.count; rows._complete = false;
+    window.fetch(meta.parts[0].file + DATA_V)
+      .then(function (r) { return r.ok ? r.json() : { listings: [] }; })
+      .then(function (pack) {
+        Array.prototype.push.apply(rows, pack.listings || []);
+        rows._complete = meta.parts.length === 1;
+        rows._loading = !rows._complete;
+        onReady(rows);
+        if (meta.parts.length > 1) {
+          var rest = meta.parts.slice(1).map(function (p) {
+            return window.fetch(p.file + DATA_V).then(function (r) { return r.ok ? r.json() : { listings: [] }; });
+          });
+          Promise.all(rest).then(function (packs) {
+            packs.forEach(function (pk) { Array.prototype.push.apply(rows, pk.listings || []); });
+            rows._complete = true; rows._loading = false;
+            if (onMore) onMore(rows);
+          }).catch(function () { rows._complete = true; rows._loading = false; if (onMore) onMore(rows); });
+        }
+      })
+      .catch(function () { rows._complete = true; rows._loading = false; onReady(rows); });
   }
 
   function ensureUniversities(then) {
@@ -842,84 +898,138 @@
    * carry those at listing depth and say so plainly, rather than either hiding
    * them or dressing them up as checked records.
    */
+  /** Shared by both directory views, so the wording is stated once. */
+  function directoryCaveat() {
+    return '<p class="muted" style="margin-top:14px;max-width:64ch">These come from official ' +
+      'government, agency and university scholarship databases. We list what each one publishes — ' +
+      'the name, who runs it, a short description and the closing date — and link you to the ' +
+      'official page. <strong>We have not yet gone through their eligibility rules one by one</strong>, ' +
+      'which is what separates these from the matched results elsewhere on this site.</p>';
+  }
+
+  function directoryCard(l) {
+    var d = l.deadline_date ? daysUntil(l.deadline_date) : null;
+    return '<article class="card"><div class="spread"><div style="min-width:0">' +
+      (l.funder_name ? '<p class="label">' + esc(l.funder_name) + '</p>' : '') +
+      '<h3 style="margin-top:5px">' + (l.detail_url ? '<a href="' + esc(l.detail_url) + '" target="_blank" rel="noreferrer">' + esc(l.name) + '</a>' : esc(l.name)) + '</h3>' +
+      '</div><span class="badge badge-warn">DIRECTORY LISTING</span></div>' +
+      (l.summary ? '<p class="small muted" style="margin-top:10px">' + esc(String(l.summary).slice(0, 260)) + '</p>' : '') +
+      '<div class="row" style="margin-top:10px">' +
+        (l.study_levels || []).map(function (x) { return '<span class="badge">' + esc(levelLabel(x)) + '</span>'; }).join('') +
+        (l.deadline_verbatim && !l.deadline_date ? '<span class="badge badge-ember">' + esc(l.deadline_verbatim) + '</span>' : '') +
+        (l.deadline_date ? '<span class="badge' + (d >= 0 ? ' badge-ember' : ' badge-warn') + '">' + esc(fmtDate(l.deadline_date)) + (d >= 0 ? '' : ' \u00b7 passed') + '</span>' : '') +
+      '</div>' +
+      '<p class="small dim" style="margin-top:10px">Listed by ' + esc(l.source_name || 'an official directory') +
+      '. We have not yet checked the eligibility rules for this one — open the official page for the full conditions.</p>' +
+      '</article>';
+  }
+
+  /** #/directory — destinations only. Never renders 30,000 cards. */
   function directoryPage() {
-    if (!listingsLoaded || !LISTINGS.length) {
+    if (!listingsLoaded || !LISTING_INDEX) {
       ensureListings();
       return '<div class="wrap section"><p class="eyebrow">FUNDING DIRECTORY</p>' +
         '<h1 style="margin-top:10px">Loading the directory…</h1></div>';
     }
-    var now = NOW;
-    var open = [], closed = [], undated = [];
-    LISTINGS.forEach(function (l) {
-      if (!l.deadline_date) undated.push(l);
-      else if (new Date(l.deadline_date) >= now) open.push(l);
-      else closed.push(l);
-    });
-    open.sort(function (a, b) { return a.deadline_date < b.deadline_date ? -1 : 1; });
-
-    function card(l) {
-      var d = l.deadline_date ? daysUntil(l.deadline_date) : null;
-      return '<article class="card"><div class="spread"><div style="min-width:0">' +
-        (l.funder_name ? '<p class="label">' + esc(l.funder_name) + '</p>' : '') +
-        '<h3 style="margin-top:5px">' + (l.detail_url ? '<a href="' + esc(l.detail_url) + '" target="_blank" rel="noreferrer">' + esc(l.name) + '</a>' : esc(l.name)) + '</h3>' +
-        '</div><span class="badge badge-warn">DIRECTORY LISTING</span></div>' +
-        (l.summary ? '<p class="small muted" style="margin-top:10px">' + esc(l.summary) + '</p>' : '') +
-        '<div class="row" style="margin-top:10px">' +
-          (l.study_levels || []).map(function (x) { return '<span class="badge">' + esc(levelLabel(x)) + '</span>'; }).join('') +
-          (l.deadline_date ? '<span class="badge' + (d >= 0 ? ' badge-ember' : ' badge-warn') + '">' + esc(fmtDate(l.deadline_date)) + (d >= 0 ? '' : ' · passed') + '</span>' : '') +
-        '</div>' +
-        '<p class="small dim" style="margin-top:10px">Listed by ' + esc(l.source_name || 'an official directory') +
-        '. We have not yet checked the eligibility rules for this one — open the official page for the full conditions.</p>' +
-        '</article>';
-    }
-
-    // Group the dateless and closed sets by the directory that published them,
-    // so nothing is silently cut off the bottom of a 2,000-item list.
-    function groupBySource(list) {
-      var by = {};
-      list.forEach(function (l) {
-        var k = l.source_name || 'Official directory';
-        (by[k] = by[k] || []).push(l);
-      });
-      return Object.keys(by).sort(function (a, b) { return by[b].length - by[a].length; })
-        .map(function (k) {
-          var items = by[k];
-          var shown = items.slice(0, 250);
-          return '<details style="margin-top:12px"><summary class="label">' + esc(k) + ' — ' + items.length + '</summary>' +
-            '<div style="margin-top:12px">' + shown.map(card).join('') +
-            (items.length > shown.length
-              ? '<p class="null" style="margin-top:12px">Showing the first ' + shown.length + ' of ' + items.length +
-                ' from this directory. Use the official directory link on any card above for the rest.</p>'
-              : '') +
-            '</div></details>';
-        }).join('');
-    }
-
-    var sources = {};
-    LISTINGS.forEach(function (l) { sources[l.source_name || 'Official directory'] = 1; });
-    var sourceCount = Object.keys(sources).length;
-
+    var idx = LISTING_INDEX;
+    var shards = idx.shards.slice().sort(function (a, b) { return b.count - a.count; });
     return '<div class="wrap section">' +
       '<p class="eyebrow">FUNDING DIRECTORY</p>' +
-      '<h1 style="margin-top:10px">' + LISTINGS.length + ' more awards from official directories</h1>' +
-      '<p class="muted" style="margin-top:14px;max-width:64ch">These come from ' + sourceCount +
-      ' government and agency directories — national scholarship portals and official study-abroad services. We list what each directory publishes — the name, who runs it, a short description and the closing date — and link you to the official page. <strong>We have not yet gone through their eligibility rules one by one</strong>, which is what separates these from the matched results elsewhere on this site.</p>' +
+      '<h1 style="margin-top:10px">' + Number(idx.total).toLocaleString() + ' awards from official directories</h1>' +
+      directoryCaveat() +
       '<div class="grid grid-3" style="margin-top:24px">' +
-        statTile(open.length, 'closing date still ahead') +
-        statTile(undated.length, 'no closing date published') +
-        statTile(closed.length, 'last published date has passed') +
+        statTile(Number(idx.total).toLocaleString(), 'listings in the directory') +
+        statTile(idx.countries, 'study destinations') +
+        statTile(idx.sources, 'source databases') +
       '</div>' +
-      '<section class="bucket"><div class="bucket-head b1"><div class="spread"><h2>Closing date still ahead</h2><p class="data">' + open.length + '</p></div></div>' +
-        (open.length ? open.map(card).join('') : '<p class="null">Nothing in this set has a future date published.</p>') +
-      '</section>' +
-      '<section class="bucket"><div class="bucket-head b2"><div class="spread"><h2>No closing date published</h2><p class="data">' + undated.length + '</p></div></div>' +
-        '<p class="muted small" style="margin-top:6px;max-width:64ch">The directory lists the award but does not state a date. We do not invent one — open the official page to see the current round.</p>' +
-        groupBySource(undated) +
-      '</section>' +
-      '<section class="bucket"><div class="bucket-head b4"><div class="spread"><h2>Last published date has passed</h2><p class="data">' + closed.length + '</p></div></div>' +
-        '<p class="muted small" style="margin-top:6px;max-width:64ch">Kept because most of these run on an annual cycle — the historic date tells you roughly when to look again. We do not move dates forward.</p>' +
-        groupBySource(closed) +
-      '</section></div>';
+      '<p class="muted small" style="margin-top:22px;max-width:64ch">Pick a destination. Each one loads on its own, so you never download the whole set.</p>' +
+      '<div style="overflow-x:auto;margin-top:14px"><table><thead><tr><th>Destination</th><th class="num">Listings</th></tr></thead><tbody>' +
+      shards.map(function (s) {
+        return '<tr><td><a href="#/directory/' + esc(s.country) + '">' +
+          esc(s.country === 'XX' ? 'Not tied to one country' : cname(s.country)) + '</a></td>' +
+          '<td class="num">' + Number(s.count).toLocaleString() + '</td></tr>';
+      }).join('') +
+      '</tbody></table></div>' +
+      '<p class="small dim" style="margin-top:18px">Prefer a plain list? <a href="/d/">Browse every listing as pages</a> — that version is also what search engines read.</p>' +
+      '</div>';
+  }
+
+  /** #/directory/<CC> — searchable, paginated, bounded DOM. */
+  var dirState = { cc: null, q: '', level: '', page: 0, per: 50 };
+
+  function directoryCountryPage(cc) {
+    cc = decodeURIComponent(cc);
+    if (!listingsLoaded || !LISTING_INDEX) {
+      ensureListings();
+      return '<div class="wrap section"><p class="eyebrow">FUNDING DIRECTORY</p>' +
+        '<h1 style="margin-top:10px">Loading the directory…</h1></div>';
+    }
+    var meta = shardMeta(cc);
+    if (!meta) return notFoundPage('/directory/' + cc);
+    var label = cc === 'XX' ? 'awards not tied to one country' : cname(cc);
+    if (dirState.cc !== cc) { dirState = { cc: cc, q: '', level: '', page: 0, per: 50 }; }
+
+    function draw(rows) {
+      var q = dirState.q.toLowerCase();
+      var list = rows.filter(function (l) {
+        if (dirState.level && (l.study_levels || []).indexOf(dirState.level) < 0) return false;
+        if (!q) return true;
+        return ((l.name || '') + ' ' + (l.funder_name || '') + ' ' + (l.summary || '')).toLowerCase().indexOf(q) >= 0;
+      });
+      var pages = Math.max(1, Math.ceil(list.length / dirState.per));
+      if (dirState.page >= pages) dirState.page = pages - 1;
+      var slice = list.slice(dirState.page * dirState.per, (dirState.page + 1) * dirState.per);
+      var host = el('dirList');
+      if (!host) return;
+      host.innerHTML =
+        '<p class="small dim" style="margin-top:16px">' + list.length.toLocaleString() + ' listing' +
+        (list.length === 1 ? '' : 's') +
+        (list.length !== rows.length ? ' of ' + rows.length.toLocaleString() : '') +
+        ' \u00b7 page ' + (dirState.page + 1) + ' of ' + pages +
+        (rows._complete ? '' : ' \u00b7 still loading ' + (rows._total - rows.length).toLocaleString() + ' more') +
+        '</p>' +
+        slice.map(directoryCard).join('') +
+        (pages > 1 ? '<div class="row" style="margin-top:18px">' +
+          '<button class="btn btn-sm" id="dirPrev"' + (dirState.page === 0 ? ' disabled' : '') + '>Previous</button>' +
+          '<button class="btn btn-sm" id="dirNext"' + (dirState.page >= pages - 1 ? ' disabled' : '') + '>Next</button></div>' : '');
+      var pv = el('dirPrev'), nx = el('dirNext');
+      if (pv) pv.onclick = function () { dirState.page--; draw(rows); };
+      if (nx) nx.onclick = function () { dirState.page++; draw(rows); window.scrollTo(0, 0); };
+    }
+
+    function mount(rows) {
+      var levels = {};
+      rows.forEach(function (l) { (l.study_levels || []).forEach(function (x) { levels[x] = (levels[x] || 0) + 1; }); });
+      var ctr = el('dirControls');
+      if (ctr && !ctr.getAttribute('data-ready')) {
+        ctr.setAttribute('data-ready', '1');
+        ctr.innerHTML =
+          '<input id="dirQ" class="data" placeholder="Search name, funder or description" style="min-width:280px">' +
+          '<select id="dirL" class="data"><option value="">Any level</option>' +
+          Object.keys(levels).sort().map(function (k) {
+            return '<option value="' + esc(k) + '">' + esc(levelLabel(k)) + '</option>';
+          }).join('') + '</select>';
+        var qi = el('dirQ'), li = el('dirL'), t;
+        qi.value = dirState.q;
+        qi.oninput = function () {
+          clearTimeout(t);
+          t = setTimeout(function () { dirState.q = qi.value; dirState.page = 0; draw(rows); }, 160);
+        };
+        li.onchange = function () { dirState.level = li.value; dirState.page = 0; draw(rows); };
+      }
+      draw(rows);
+    }
+
+    ensureCountry(cc, mount, function (rows) { mount(rows); });
+
+    return '<div class="wrap section">' +
+      '<p class="small"><a href="#/directory">Funding directory</a> <span class="dim">/</span> ' + esc(label) + '</p>' +
+      '<h1 style="margin-top:14px">' + esc(cc === 'XX' ? 'Awards not tied to one country' : 'Scholarships in ' + label) + '</h1>' +
+      '<p class="muted" style="margin-top:10px">' + Number(meta.count).toLocaleString() + ' listings from official sources.</p>' +
+      directoryCaveat() +
+      '<div class="row" id="dirControls" style="margin-top:20px"></div>' +
+      '<div id="dirList"><p class="muted" style="margin-top:16px">Loading…</p></div>' +
+      '</div>';
   }
 
   // ---------------------------------------------------------------- explore
@@ -1204,6 +1314,7 @@
   route(/^\/results$/, resultsPage);
   route(/^\/schools$/, schoolsPage);
   route(/^\/directory$/, directoryPage);
+  route(/^\/directory\/([^/]+)$/, directoryCountryPage);
   route(/^\/scholarships\/([^/]+)$/, recordPage);
   route(/^\/explore$/, explorePage);
   route(/^\/explore\/deadlines$/, deadlinesPage);
