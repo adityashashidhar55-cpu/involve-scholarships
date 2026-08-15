@@ -93,33 +93,71 @@
     return null;
   }
 
+  // Callers waiting on a country whose fetch is already in flight.
+  var COUNTRY_WAIT = {};
+
+  function fanout(cc, key, rows) {
+    var q = COUNTRY_WAIT[cc] || [];
+    if (key === 'ready') COUNTRY_WAIT[cc] = q.slice();   // keep them for onMore
+    else COUNTRY_WAIT[cc] = [];
+    q.forEach(function (w) { if (w[key]) w[key](rows); });
+  }
+
+  /**
+   * Two rules make this safe to call from a page function:
+   *
+   *  1. The callback NEVER fires synchronously. directoryCountryPage() calls
+   *     ensureCountry() before it returns the markup that contains #dirList,
+   *     so a cached country calling back straight away would mount into DOM
+   *     that is about to be replaced, and the page would sit on "Loading…"
+   *     forever. Revisiting a country you had already opened did exactly that.
+   *  2. A second caller arriving while a fetch is in flight joins that fetch
+   *     instead of being dropped on the floor.
+   */
   function ensureCountry(cc, onReady, onMore) {
     var have = COUNTRY_ROWS[cc];
-    if (have && have._complete) { onReady(have); return; }
-    if (have && have._loading) return;
+    if (have && have._complete) {
+      setTimeout(function () { onReady(have); }, 0);
+      return;
+    }
+    if (have && have._loading) {
+      (COUNTRY_WAIT[cc] = COUNTRY_WAIT[cc] || []).push({ ready: onReady, more: onMore });
+      if (have.length) setTimeout(function () { onReady(have); }, 0);
+      return;
+    }
     var meta = shardMeta(cc);
-    if (!meta || !window.fetch) { onReady([]); return; }
+    if (!meta || !window.fetch) { setTimeout(function () { onReady([]); }, 0); return; }
     var rows = COUNTRY_ROWS[cc] = [];
     rows._loading = true; rows._total = meta.count; rows._complete = false;
+    COUNTRY_WAIT[cc] = [];
     window.fetch(meta.parts[0].file + DATA_V)
       .then(function (r) { return r.ok ? r.json() : { listings: [] }; })
       .then(function (pack) {
         Array.prototype.push.apply(rows, pack.listings || []);
         rows._complete = meta.parts.length === 1;
         rows._loading = !rows._complete;
-        onReady(rows);
+        onReady(rows); fanout(cc, 'ready', rows);
         if (meta.parts.length > 1) {
           var rest = meta.parts.slice(1).map(function (p) {
             return window.fetch(p.file + DATA_V).then(function (r) { return r.ok ? r.json() : { listings: [] }; });
           });
-          Promise.all(rest).then(function (packs) {
-            packs.forEach(function (pk) { Array.prototype.push.apply(rows, pk.listings || []); });
+          var done = function () {
             rows._complete = true; rows._loading = false;
             if (onMore) onMore(rows);
-          }).catch(function () { rows._complete = true; rows._loading = false; if (onMore) onMore(rows); });
+            fanout(cc, 'more', rows);
+          };
+          Promise.all(rest).then(function (packs) {
+            packs.forEach(function (pk) { Array.prototype.push.apply(rows, pk.listings || []); });
+            done();
+          }).catch(done);
+        } else {
+          COUNTRY_WAIT[cc] = [];
         }
       })
-      .catch(function () { rows._complete = true; rows._loading = false; onReady(rows); });
+      .catch(function () {
+        rows._complete = true; rows._loading = false;
+        onReady(rows); fanout(cc, 'ready', rows); fanout(cc, 'more', rows);
+      });
   }
 
   function ensureUniversities(then) {
@@ -773,13 +811,13 @@
       (wantsMgmt
         ? '<div class="card card-help" style="margin-top:20px"><p class="label">MORE MANAGEMENT FUNDING IN THE DIRECTORY</p>' +
           '<p class="small muted" style="margin-top:8px;max-width:66ch">The buckets above only cover awards we have read line by line. ' +
-          'The directory holds a further 1,144 MBA, MiM and management awards from business schools, governments and trusts, ' +
-          'including 1,059 in Europe. Their eligibility is not checked yet, so treat them as leads.</p>' +
+          'The directory holds a further 1,527 MBA, MiM and management awards from business schools, governments and trusts, ' +
+          'including 1,166 in Europe. Their eligibility is not checked yet, so treat them as leads.</p>' +
           '<div class="row" style="margin-top:12px">' +
-          '<a class="btn btn-sm btn-primary" href="#/directory/GB">United Kingdom (594)</a>' +
-          '<a class="btn btn-sm" href="#/directory/FR">France (93)</a>' +
-          '<a class="btn btn-sm" href="#/directory/DE">Germany (90)</a>' +
-          '<a class="btn btn-sm" href="#/directory/ES">Spain (82)</a>' +
+          '<a class="btn btn-sm btn-primary" href="#/directory/GB">United Kingdom (611)</a>' +
+          '<a class="btn btn-sm" href="#/directory/FR">France (103)</a>' +
+          '<a class="btn btn-sm" href="#/directory/DE">Germany (127)</a>' +
+          '<a class="btn btn-sm" href="#/directory/ES">Spain (100)</a>' +
           '<a class="btn btn-sm" href="#/directory">All destinations</a></div>' +
           '<p class="small dim" style="margin-top:10px">Use the "MBA and management" button on any destination to filter to them.</p></div>'
         : '') +
