@@ -7,26 +7,74 @@
 
   var CORE = window.InvolveCore;
   var V = window.INVOLVE_VOCAB;
-  var DATA = window.INVOLVE_CATALOGUE;
-  var ALL = DATA.scholarships;
   var NOW = new Date();
   var STALE_DAYS = 90;
-  var BY_SLUG = {};
-  ALL.forEach(function (r) { BY_SLUG[r.slug] = r; });
 
-  /** College-specific awards are kept out of the general pool by default. */
+  /**
+   * The register is served as two files so a phone does not download and parse
+   * college awards it has not asked for:
+   *   data-core.json         government, foundation and multilateral awards —
+   *                          the main product, loaded before first paint
+   *   data-universities.json awards held by a named university — fetched in the
+   *                          background once the page is interactive
+   * The single-file build inlines both as window.INVOLVE_CATALOGUE.
+   */
+  var ALL = [], GENERAL = [], COLLEGE = [], BY_SLUG = {}, SCHOOL_NAMES = [], SCHOOL_META = {}, SCHOOLS = [], FUNDERS = [];
+  var universitiesLoaded = false;
+  // Data packs are served with a long cache lifetime, so a published data update
+  // would otherwise sit behind a returning visitor's browser cache. The build
+  // stamps a version here and every data fetch carries it, which makes a new
+  // build a new URL. window.INVOLVE_DATA_V is injected by assemble.mjs.
+  var DATA_V = '?v=' + (window.INVOLVE_DATA_V || '0');
+
+  /** Directory listings — breadth without claimed detail. See directoryPage(). */
+  var LISTINGS = [], listingsLoaded = false;
+
+  /** Government / private / multilateral — never tied to one institution. */
   function isCollegeSpecific(r) { return r.scope === 'school' || !!r.school_name; }
-  var GENERAL = ALL.filter(function (r) { return !isCollegeSpecific(r); });
-  var COLLEGE = ALL.filter(isCollegeSpecific);
 
-  var SCHOOL_NAMES = (function () {
-    var s = {};
-    COLLEGE.forEach(function (r) { if (r.school_name) s[r.school_name] = 1; });
-    (DATA.schools || []).forEach(function (r) { if (r.name) s[r.name] = 1; });
-    return Object.keys(s).sort();
-  })();
-  var SCHOOL_META = {};
-  (DATA.schools || []).forEach(function (s) { SCHOOL_META[s.name] = s; });
+  function hydrate(pack) {
+    (pack.scholarships || []).forEach(function (r) {
+      if (BY_SLUG[r.slug]) return;
+      BY_SLUG[r.slug] = r;
+      ALL.push(r);
+      (isCollegeSpecific(r) ? COLLEGE : GENERAL).push(r);
+    });
+    (pack.schools || []).forEach(function (s) {
+      if (!s || !s.name || SCHOOL_META[s.name]) return;
+      SCHOOL_META[s.name] = s; SCHOOLS.push(s);
+    });
+    (pack.funders || []).forEach(function (f) { if (f && f.name) FUNDERS.push(f); });
+    var names = {};
+    COLLEGE.forEach(function (r) { if (r.school_name) names[r.school_name] = 1; });
+    SCHOOLS.forEach(function (r) { if (r.name) names[r.name] = 1; });
+    SCHOOL_NAMES = Object.keys(names).sort();
+  }
+
+  /**
+   * Pull the university file in when it is actually needed. Safe to call
+   * repeatedly; re-renders the current route once the data lands.
+   */
+  function ensureListings(then) {
+    if (listingsLoaded) { if (then) then(); return; }
+    listingsLoaded = true;
+    if (window.INVOLVE_LISTINGS) { LISTINGS = window.INVOLVE_LISTINGS.listings || []; if (then) then(); return; }
+    if (!window.fetch) { if (then) then(); return; }
+    window.fetch('data-listings.json' + DATA_V)
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (pack) { if (pack) { LISTINGS = pack.listings || []; render(); } if (then) then(); })
+      .catch(function () { if (then) then(); });
+  }
+
+  function ensureUniversities(then) {
+    if (universitiesLoaded) { if (then) then(); return; }
+    universitiesLoaded = true;
+    if (!window.fetch) { if (then) then(); return; }
+    window.fetch('data-universities.json' + DATA_V)
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (pack) { if (pack) { hydrate(pack); render(); } if (then) then(); })
+      .catch(function () { if (then) then(); });
+  }
 
   // -------------------------------------------------------------- utilities
   function esc(s) {
@@ -195,15 +243,15 @@
     });
   }
   function errorPage(e) {
-    return '<div class="wrap section"><p class="eyebrow">SOMETHING BROKE</p><h1>This page failed to load</h1>' +
-      '<p class="muted" style="margin-top:14px;max-width:60ch">The register itself is fine — this is a fault in the page. The most common cause is saved intake data from an older version.</p>' +
+    return '<div class="wrap section"><p class="eyebrow">SORRY</p><h1>This page didn\u2019t load</h1>' +
+      '<p class="muted" style="margin-top:14px;max-width:60ch">Your saved details may be from an older version of the site — this is a fault in the page. The most common cause is saved intake data from an older version.</p>' +
       '<div class="row" style="margin-top:22px"><a class="btn btn-primary" href="#/">Go home</a><button class="btn" id="clearAll">Clear saved data</button></div>' +
-      '<pre class="mono small dim" style="margin-top:22px;white-space:pre-wrap">' + esc(e && e.message) + '</pre></div>';
+      '</div>';
   }
   function notFoundPage(path) {
     return '<div class="wrap section"><p class="eyebrow">404</p><h1>Nothing at this address</h1>' +
       '<p class="muted" style="margin-top:14px"><code class="mono">' + esc(path) + '</code> is not a page on this site.</p>' +
-      '<div class="row" style="margin-top:22px"><a class="btn btn-primary" href="#/explore">Browse the register</a></div></div>';
+      '<div class="row" style="margin-top:22px"><a class="btn btn-primary" href="#/explore">Browse all funding</a></div></div>';
   }
 
   // ------------------------------------------------------------------ intake
@@ -252,19 +300,19 @@
 
   function homePage() {
     var p = loadProfile() || {};
-    var open = ALL.filter(function (r) { return r.status === 'open'; }).length;
     var years = deadlineYears();
 
     return '' +
     '<section class="wrap section">' +
       '<p class="eyebrow">INVOLVE SCHOLARSHIPS</p>' +
       '<h1 style="margin-top:10px;max-width:16ch">Find the funding you are actually eligible for.</h1>' +
-      '<p class="muted" style="margin-top:18px;max-width:62ch">Every record comes from an official funder, government or university page — never an aggregator — and carries the exact wording it was read from, plus the date it was last checked. Where a funder has not published something, we say so instead of guessing.</p>' +
+      '<p class="muted" style="margin-top:18px;max-width:62ch">Government, foundation and multilateral scholarships — the awards you apply for directly, on your own merits. Every one is read from the funder\u2019s official page, quotes their exact wording, and shows the date we last checked it. Where a funder has not published something, we say so instead of guessing.</p>' +
       '<div class="row" style="margin-top:26px"><a class="btn btn-primary" href="#intake">Match my profile</a>' +
-      '<a class="btn" href="#/explore">Browse the register</a><a class="btn" href="#/schools">University-specific awards</a></div>' +
+      '<a class="btn" href="#/explore">Browse all funding</a><a class="btn" href="#/directory">Funding directory</a></div>' +
       '<div class="grid grid-3" style="margin-top:44px">' +
-        statTile(ALL.length, 'records in the register') + statTile(open, 'currently open') +
-        statTile(COLLEGE.length, 'tied to a named university') +
+        statTile(GENERAL.length, 'government & private awards') +
+        statTile(GENERAL.filter(function (r) { return r.status === 'open'; }).length, 'currently open') +
+        statTile(COLLEGE.length || '—', 'university-run, listed separately') +
       '</div>' +
     '</section>' +
 
@@ -274,7 +322,7 @@
       '<p class="muted" style="margin-top:12px;max-width:62ch">Only nationality and study level are required. Every other field turns an <em>unknown</em> into a real yes or no — leave one blank and the engine reports unknown for rules that depend on it, never a guess.</p>' +
       '<form id="intake-form" style="margin-top:22px">' +
 
-      fieldset('1 · Who you are', 'Nationality drives more rules than any other field — 74 records in the register restrict by it.',
+      fieldset('1 · Who you are', 'Nationality decides more awards than anything else you can tell us — most funders restrict by it.',
         '<div class="grid grid-2">' +
           '<div><label class="field label" for="f-nat">Nationality *</label>' +
             '<select id="f-nat"><option value="">Select a country…</option>' +
@@ -301,7 +349,7 @@
         '<div style="margin-top:18px"><p class="label">Course area</p>' + chips('course_groups', V.COURSE_GROUPS, p.course_groups) + '</div>' +
         '<div style="margin-top:18px"><label class="field label" for="f-course">Specific course or subject <span class="dim">(free text — matched against the funder’s own wording)</span></label>' +
           '<input id="f-course" type="text" placeholder="e.g. renewable energy engineering" value="' + esc((p.fields || []).join(', ')) + '"></div>' +
-        '<div style="margin-top:18px"><p class="label">Target universities <span class="dim">(' + SCHOOL_NAMES.length + ' in the register with their own awards)</span></p>' +
+        '<div style="margin-top:18px"><p class="label">Target universities <span class="dim">(' + SCHOOL_NAMES.length + ' with their own awards)</span></p>' +
           '<div class="chipset" style="margin-top:8px">' + SCHOOL_NAMES.map(function (n) {
             var on = (p.target_schools || []).indexOf(n) >= 0;
             return '<button type="button" class="chip" data-chip="target_schools" data-value="' + esc(n) + '" aria-pressed="' + on + '">' + esc(n) + '</button>';
@@ -319,7 +367,7 @@
           '</select></div></div>') +
 
       fieldset('4 · Academic record',
-        'Degree class and GPA decide 44 rules between them.',
+        'Many awards set a minimum degree class or grade average. Filling these in turns a maybe into a yes or no.',
         '<div class="grid grid-2">' +
           '<div><label class="field label" for="f-degree">Highest degree completed</label>' +
             sel('f-degree', [{ key: 'secondary', label: 'Secondary school' }, { key: 'bachelor', label: 'Bachelor’s' }, { key: 'masters', label: 'Master’s' }, { key: 'phd', label: 'PhD' }], p.highest_degree, 'Select…') + '</div>' +
@@ -347,7 +395,7 @@
         '</div>') +
 
       fieldset('6 · Money',
-        'Twenty records in the register carry a financial-need rule, but only six publish a number. The rest say things like “demonstrated financial need” — those cannot be scored, so we flag them as need-based rather than pretend to decide.',
+        'Some funders publish an income cap as a figure; most simply ask you to demonstrate financial need. We compare the figures and flag the rest as need-based rather than guess on your behalf.',
         '<div class="grid grid-2">' +
           '<div><label class="field label" for="f-income">Annual household income</label><input id="f-income" type="number" step="1000" min="0" placeholder="leave blank if unsure" value="' + esc(p.household_income_amount == null ? '' : p.household_income_amount) + '"></div>' +
           '<div><label class="field label" for="f-cur">Currency</label>' +
@@ -516,13 +564,31 @@
         ((s.destination_countries || []).length ? ' · Study in ' + esc(s.destination_countries.slice(0, 3).map(cname).join(', ')) : '') + '</p>' +
       why +
       '<div style="margin-top:14px"><div class="bar"><span style="width:' + pct + '%"></span></div>' +
-      '<p class="label" style="margin-top:7px">FIT ' + (r.fit_score == null ? '—' : r.fit_score.toFixed(2)) +
-      ' = value ' + fmtF(f.value_score) + ' × fit ' + fmtF(f.fit) + ' × 1/competition ' + fmtF(f.competition_factor) + ' × urgency ' + fmtF(f.deadline_urgency) + '</p></div>' +
+      '<p class="label" style="margin-top:7px">' + esc(rankReason(r)) + '</p></div>' +
       '<div class="row" style="margin-top:14px"><a class="btn btn-sm" href="#/scholarships/' + esc(s.slug) + '">Open record</a>' +
       '<button class="btn btn-sm" data-save="' + esc(s.slug) + '">' + (loadShortlist().indexOf(s.slug) >= 0 ? 'Saved ✓' : 'Save') + '</button></div>' +
       '</article>';
   }
   function fmtF(n) { return n == null ? '—' : (Math.round(n * 100) / 100); }
+
+  /**
+   * Why a record sits where it does, in words a applicant can act on.
+   * The engine's four ranking factors are still what decides the order — this
+   * just says what they mean instead of printing the arithmetic.
+   */
+  function rankReason(r) {
+    var f = r.factors || {}, s = r.scholarship, bits = [];
+    if (f.value_score >= 0.85) bits.push('covers the most');
+    else if (f.value_score <= 0.4) bits.push('partial support');
+    if (f.fit >= 0.85) bits.push('close match to your profile');
+    else if (f.fit <= 0.45) bits.push('loose match');
+    if (f.competition_factor >= 2.5) bits.push('few awards, very competitive');
+    else if (f.competition_factor <= 1.3) bits.push('many awards given');
+    var d = s.deadline_date ? daysUntil(s.deadline_date) : null;
+    if (s.status === 'open' && d !== null && d >= 0 && d <= 30) bits.push('closing soon');
+    else if (s.status === 'cycle_closed') bits.push('waiting on the next round');
+    return bits.length ? 'RANKED HERE BECAUSE: ' + bits.join(' · ') : 'RANKED ON VALUE, FIT, COMPETITION AND DEADLINE';
+  }
   function ruleText(c) {
     if (!c) return '';
     var v = Array.isArray(c.value) ? c.value.map(function (x) { return V.COUNTRY_NAME[x] || x; }).join(', ')
@@ -580,7 +646,7 @@
           var mineAmt = p && p.household_income_amount;
           return '<p style="margin-top:8px">Cap: <strong>' + esc(c.value.toLocaleString('en')) + '</strong>' +
             (mineAmt != null ? ' · you entered <strong>' + esc(fmtMoney(mineAmt, p.household_income_currency)) + '</strong>' : ' · you have not entered an income') +
-            '</p><p class="small dim" style="margin-top:4px">The register does not record which currency the cap is in — confirm on the official page before relying on this comparison.</p>' +
+            '</p><p class="small dim" style="margin-top:4px">The funder does not state the currency of this cap on the page we read — confirm on the official page before relying on this comparison.</p>' +
             '<p class="snippet">“' + esc(c.source_snippet || '') + '”</p>';
         }).join('') + '</div>' : '') +
 
@@ -707,7 +773,7 @@
 
   function provenanceBlock(s) {
     return '<h2>Where this came from</h2><div class="card" style="margin-top:16px">' +
-      '<div class="row">' + freshnessBadge(s) + '<span class="badge">' + esc((s.verification_status || 'STATUS NOT RECORDED').toUpperCase().replace(/_/g, ' ')) + '</span></div>' +
+      '<div class="row">' + freshnessBadge(s) + (s.verification_status === 'official_page_verified' ? '<span class="badge">CHECKED ON THE FUNDER\u2019S OWN PAGE</span>' : '') + '</div>' +
       '<p class="snippet" style="margin-top:14px">“' + esc(s.source_snippet) + '”</p>' +
       '<p class="small" style="margin-top:14px"><a href="' + esc(s.source_url) + '" target="_blank" rel="noreferrer">' + esc(s.source_url) + '</a></p>' +
       '<p class="small dim" style="margin-top:10px">Last verified ' + esc(fmtDate(s.last_verified_at) || 'date not recorded') +
@@ -746,13 +812,19 @@
 
   // ------------------------------------------------------------ college page
   function schoolsPage() {
+    if (!universitiesLoaded) {
+      ensureUniversities();
+      return '<div class="wrap section"><p class="eyebrow">UNIVERSITY-RUN AWARDS</p>' +
+        '<h1 style="margin-top:10px">Loading university awards…</h1>' +
+        '<p class="muted" style="margin-top:14px">These load separately so the main list stays fast on mobile.</p></div>';
+    }
     var byName = {};
     COLLEGE.forEach(function (r) { (byName[r.school_name || 'Unnamed institution'] = byName[r.school_name || 'Unnamed institution'] || []).push(r); });
     var names = Object.keys(byName).sort();
     return '<div class="wrap section">' +
-      '<p class="eyebrow">UNIVERSITY-SPECIFIC AWARDS</p>' +
-      '<h1 style="margin-top:10px">Funding held by a named school</h1>' +
-      '<p class="muted" style="margin-top:14px;max-width:64ch">These are kept apart from the main register because they work differently: most are decided alongside your admission rather than applied for separately, and you can only hold one if that school admits you. ' +
+      '<p class="eyebrow">UNIVERSITY-RUN AWARDS</p>' +
+      '<h1 style="margin-top:10px">Funding held by a named university</h1>' +
+      '<p class="muted" style="margin-top:14px;max-width:64ch">These are listed separately because they work differently: most are decided alongside your admission rather than applied for separately, and you can only hold one if that school admits you. ' +
       COLLEGE.length + ' records across ' + names.length + ' institutions.</p>' +
       names.map(function (n) {
         var meta = SCHOOL_META[n] || {};
@@ -762,6 +834,92 @@
           (meta.scholarships_page_url ? ' · <a href="' + esc(meta.scholarships_page_url) + '" target="_blank" rel="noreferrer">official scholarships page</a>' : '') + '</p></div>' +
           byName[n].map(simpleCard).join('') + '</section>';
       }).join('') + '</div>';
+  }
+
+  // -------------------------------------------------------------- directory
+  /**
+   * Official directories publish far more awards than we can fully verify. We
+   * carry those at listing depth and say so plainly, rather than either hiding
+   * them or dressing them up as checked records.
+   */
+  function directoryPage() {
+    if (!listingsLoaded || !LISTINGS.length) {
+      ensureListings();
+      return '<div class="wrap section"><p class="eyebrow">FUNDING DIRECTORY</p>' +
+        '<h1 style="margin-top:10px">Loading the directory…</h1></div>';
+    }
+    var now = NOW;
+    var open = [], closed = [], undated = [];
+    LISTINGS.forEach(function (l) {
+      if (!l.deadline_date) undated.push(l);
+      else if (new Date(l.deadline_date) >= now) open.push(l);
+      else closed.push(l);
+    });
+    open.sort(function (a, b) { return a.deadline_date < b.deadline_date ? -1 : 1; });
+
+    function card(l) {
+      var d = l.deadline_date ? daysUntil(l.deadline_date) : null;
+      return '<article class="card"><div class="spread"><div style="min-width:0">' +
+        (l.funder_name ? '<p class="label">' + esc(l.funder_name) + '</p>' : '') +
+        '<h3 style="margin-top:5px">' + (l.detail_url ? '<a href="' + esc(l.detail_url) + '" target="_blank" rel="noreferrer">' + esc(l.name) + '</a>' : esc(l.name)) + '</h3>' +
+        '</div><span class="badge badge-warn">DIRECTORY LISTING</span></div>' +
+        (l.summary ? '<p class="small muted" style="margin-top:10px">' + esc(l.summary) + '</p>' : '') +
+        '<div class="row" style="margin-top:10px">' +
+          (l.study_levels || []).map(function (x) { return '<span class="badge">' + esc(levelLabel(x)) + '</span>'; }).join('') +
+          (l.deadline_date ? '<span class="badge' + (d >= 0 ? ' badge-ember' : ' badge-warn') + '">' + esc(fmtDate(l.deadline_date)) + (d >= 0 ? '' : ' · passed') + '</span>' : '') +
+        '</div>' +
+        '<p class="small dim" style="margin-top:10px">Listed by ' + esc(l.source_name || 'an official directory') +
+        '. We have not yet checked the eligibility rules for this one — open the official page for the full conditions.</p>' +
+        '</article>';
+    }
+
+    // Group the dateless and closed sets by the directory that published them,
+    // so nothing is silently cut off the bottom of a 2,000-item list.
+    function groupBySource(list) {
+      var by = {};
+      list.forEach(function (l) {
+        var k = l.source_name || 'Official directory';
+        (by[k] = by[k] || []).push(l);
+      });
+      return Object.keys(by).sort(function (a, b) { return by[b].length - by[a].length; })
+        .map(function (k) {
+          var items = by[k];
+          var shown = items.slice(0, 250);
+          return '<details style="margin-top:12px"><summary class="label">' + esc(k) + ' — ' + items.length + '</summary>' +
+            '<div style="margin-top:12px">' + shown.map(card).join('') +
+            (items.length > shown.length
+              ? '<p class="null" style="margin-top:12px">Showing the first ' + shown.length + ' of ' + items.length +
+                ' from this directory. Use the official directory link on any card above for the rest.</p>'
+              : '') +
+            '</div></details>';
+        }).join('');
+    }
+
+    var sources = {};
+    LISTINGS.forEach(function (l) { sources[l.source_name || 'Official directory'] = 1; });
+    var sourceCount = Object.keys(sources).length;
+
+    return '<div class="wrap section">' +
+      '<p class="eyebrow">FUNDING DIRECTORY</p>' +
+      '<h1 style="margin-top:10px">' + LISTINGS.length + ' more awards from official directories</h1>' +
+      '<p class="muted" style="margin-top:14px;max-width:64ch">These come from ' + sourceCount +
+      ' government and agency directories — national scholarship portals and official study-abroad services. We list what each directory publishes — the name, who runs it, a short description and the closing date — and link you to the official page. <strong>We have not yet gone through their eligibility rules one by one</strong>, which is what separates these from the matched results elsewhere on this site.</p>' +
+      '<div class="grid grid-3" style="margin-top:24px">' +
+        statTile(open.length, 'closing date still ahead') +
+        statTile(undated.length, 'no closing date published') +
+        statTile(closed.length, 'last published date has passed') +
+      '</div>' +
+      '<section class="bucket"><div class="bucket-head b1"><div class="spread"><h2>Closing date still ahead</h2><p class="data">' + open.length + '</p></div></div>' +
+        (open.length ? open.map(card).join('') : '<p class="null">Nothing in this set has a future date published.</p>') +
+      '</section>' +
+      '<section class="bucket"><div class="bucket-head b2"><div class="spread"><h2>No closing date published</h2><p class="data">' + undated.length + '</p></div></div>' +
+        '<p class="muted small" style="margin-top:6px;max-width:64ch">The directory lists the award but does not state a date. We do not invent one — open the official page to see the current round.</p>' +
+        groupBySource(undated) +
+      '</section>' +
+      '<section class="bucket"><div class="bucket-head b4"><div class="spread"><h2>Last published date has passed</h2><p class="data">' + closed.length + '</p></div></div>' +
+        '<p class="muted small" style="margin-top:6px;max-width:64ch">Kept because most of these run on an annual cycle — the historic date tells you roughly when to look again. We do not move dates forward.</p>' +
+        groupBySource(closed) +
+      '</section></div>';
   }
 
   // ---------------------------------------------------------------- explore
@@ -776,9 +934,9 @@
       });
     });
     var countries = Object.keys(byCountry).sort(function (a, b) { return byCountry[b].total - byCountry[a].total; });
-    return '<div class="wrap section"><p class="eyebrow">EXPLORE THE REGISTER</p>' +
+    return '<div class="wrap section"><p class="eyebrow">BROWSE ALL FUNDING</p>' +
       '<h1 style="margin-top:10px">Destination × level × funding type</h1>' +
-      '<p class="muted" style="margin-top:14px;max-width:62ch">Counts are computed live from the register. University-specific awards are excluded here and live on their own page.</p>' +
+      '<p class="muted" style="margin-top:14px;max-width:62ch">Counts update automatically as new awards are added. University-run awards are listed separately on their own page.</p>' +
       '<div class="row" style="margin-top:20px"><a class="btn btn-sm" href="#/explore/deadlines">Deadlines by month</a>' +
       '<a class="btn btn-sm" href="#/schools">University awards</a><a class="btn btn-sm" href="#/calendar">My calendar</a></div>' +
       '<div style="overflow-x:auto;margin-top:26px"><table><thead><tr><th>Destination</th><th class="num">Records</th><th class="num">Open</th>' +
@@ -871,24 +1029,24 @@
     var open = ALL.filter(function (r) { return r.status === 'open'; }).length;
     var withDl = ALL.filter(function (r) { return !!r.deadline_date; }).length;
     var stale = ALL.filter(function (r) { var d = r.last_verified_at ? daysSince(r.last_verified_at) : null; return d !== null && d > STALE_DAYS; }).length;
-    return '<div class="wrap-narrow section"><p class="eyebrow">METHODOLOGY</p><h1 style="margin-top:10px">How this register is built</h1>' +
+    return '<div class="wrap-narrow section"><p class="eyebrow">METHODOLOGY</p><h1 style="margin-top:10px">How we check every award</h1>' +
       '<div class="stack" style="margin-top:22px">' +
-        '<p class="muted">Every record is read from an official funder, government or university page. Aggregator sites are rejected at build time against a host blocklist — used for discovery only, never as a source.</p>' +
-        '<p class="muted">Each record carries the URL it was read from, a verbatim snippet justifying each rule, and the date it was last checked. A record missing any of those three cannot be serialised at all — the provenance gate throws rather than emit it.</p>' +
+        '<p class="muted">Every entry is read from an official funder, government or university page. We never copy from scholarship listing sites — if we cannot find the funder\u2019s own page, the award does not go in.</p>' +
+        '<p class="muted">Every entry shows you the page it came from, quotes the funder\u2019s own wording for each rule, and tells you when we last checked it. Anything we cannot show a source for does not go in.</p>' +
         '<p class="muted">Where a funder has not published something, the field is null and the page says <em>NOT PUBLISHED</em>. Nulls are never filled from general knowledge, and amounts keep the funder’s original currency and wording.</p>' +
-        '<p class="muted">Financial need is the clearest case. Twenty records carry a need rule; only six publish a number. For the other fourteen we mark the award need-based and quote what the funder said, rather than deciding on their behalf.</p>' +
+        '<p class="muted">Financial need is the clearest case. Where a funder publishes an income cap as a figure, we compare it with yours. Where they simply ask you to demonstrate need, we mark the award need-based and quote what they said, rather than deciding on your behalf.</p>' +
       '</div>' +
       '<h2 style="margin-top:36px">Coverage, stated honestly</h2>' +
       '<div class="grid grid-2" style="margin-top:16px">' + statTile(ALL.length, 'records') + statTile(open, 'currently open') +
       statTile(withDl, 'with a published deadline') + statTile(stale, 'not re-verified in 90 days') + '</div>' +
-      '<p class="small dim" style="margin-top:14px">Computed from the register on every page load. Not marketing figures.</p>' +
+      '<p class="small dim" style="margin-top:14px">Counted from the live database each time this page loads.</p>' +
       '<h2 style="margin-top:36px">The four buckets</h2><div style="margin-top:14px">' +
       Object.keys(BUCKET_META).map(function (k) {
         return '<div class="card card-tight" style="margin-top:10px"><p class="label">' + esc(BUCKET_META[k].title) + '</p>' +
           '<p class="small muted" style="margin-top:6px">' + esc(BUCKET_META[k].blurb) + '</p></div>';
       }).join('') + '</div>' +
       '<h2 style="margin-top:36px">Ranking</h2>' +
-      '<p class="muted" style="margin-top:12px">Within a bucket, records are ordered by <code class="mono">value × fit × (1/competition) × deadline urgency</code>. All four numbers are printed on every result card. There is no hidden weighting.</p></div>';
+      '<p class="muted" style="margin-top:12px">Within each group, awards are ordered by how much they cover, how closely they match your profile, how competitive they are, and how soon they close. Every result card says in plain words why it sits where it does.</p></div>';
   }
 
   // --------------------------------------------------------------------- CTA
@@ -1045,19 +1203,13 @@
   route(/^\/$/, homePage);
   route(/^\/results$/, resultsPage);
   route(/^\/schools$/, schoolsPage);
+  route(/^\/directory$/, directoryPage);
   route(/^\/scholarships\/([^/]+)$/, recordPage);
   route(/^\/explore$/, explorePage);
   route(/^\/explore\/deadlines$/, deadlinesPage);
   route(/^\/explore\/([^/]+)$/, exploreCountryPage);
   route(/^\/calendar$/, calendarPage);
   route(/^\/methodology$/, methodologyPage);
-  // Directory tier (separate register, lazily fetched, never profile-matched).
-  var DIR = window.InvolveDirectory;
-  if (DIR) {
-    route(/^\/directory$/, function () { return DIR.hub(); });
-    route(/^\/directory\/([^/]+)$/, function (c) { return DIR.country(c); });
-    route(/^\/directory\/([^/]+)\/([^/]+)$/, function (c, id) { return DIR.record(c, id); });
-  }
 
   window.addEventListener('hashchange', function () {
     if (window.location.hash === '#intake') {
@@ -1069,5 +1221,29 @@
   });
 
   if (window.location.hash === '#intake') window.location.hash = '#/';
-  render();
+
+  // ------------------------------------------------------------------- boot
+  function start() {
+    render();
+    // Warm the university file straight after first paint so the Universities
+    // page and school filters are ready by the time anyone reaches them.
+    if (window.requestIdleCallback) window.requestIdleCallback(function () { ensureUniversities(); ensureListings(); });
+    else window.setTimeout(function () { ensureUniversities(); ensureListings(); }, 1200);
+  }
+
+  if (window.INVOLVE_CATALOGUE) {           // single-file build
+    hydrate(window.INVOLVE_CATALOGUE);
+    universitiesLoaded = true;
+    start();
+  } else {                                   // split build
+    window.fetch('data-core.json' + DATA_V)
+      .then(function (r) { return r.json(); })
+      .then(function (pack) { hydrate(pack); start(); })
+      .catch(function (e) {
+        console.error('[involve] could not load the register', e);
+        document.getElementById('view').innerHTML =
+          '<div class="wrap section"><p class="eyebrow">SORRY</p><h1>We couldn\u2019t load the scholarships</h1>' +
+          '<p class="muted" style="margin-top:14px">Please refresh the page. If it keeps happening, your connection may be blocking part of the site.</p></div>';
+      });
+  }
 })();
