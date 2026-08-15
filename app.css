@@ -1,25 +1,28 @@
 /* Involve Scholarships — matched to involve-consulting.com.
-   teal #58868C on white · pale cyan #E7FAFD · cream #FFF2D0
+   teal #58868C on white · text #333 · amber #EBB305 · cream #FFF2D0
    Montserrat throughout · 3px radius · flat buttons, no shadows
    (This replaces the earlier Fluz palette at the client's request so the
    page sits inside the Involve Consulting site without a visual seam.) */
 
 :root {
-  /* Matched to involve-consulting.com — teal accent on white, Montserrat,
-     3px radius, flat buttons (no shadow). */
-  --ink: #14262a;
+  /* Sampled from involve-consulting.com computed styles, 2026-08-15:
+     body Montserrat · text rgb(51,51,51) · headings 700 · primary rgb(88,134,140)
+     · secondary rgb(235,179,5) · cream rgb(255,242,208) · wash rgb(228,250,253)
+     · button radius 3px · no shadows. */
+  --ink: #333333;           /* their body + heading colour, not near-black */
   --paper: #ffffff;
-  --wash: #e7fafd;          /* pale cyan section tint */
-  --wash-2: #e4fafd;
-  --cream: #fff2d0;         /* warm highlight */
+  --wash: #e4fafd;          /* pale cyan section tint */
+  --wash-2: #e7fafd;
+  --cream: #fff2d0;         /* warm hero / highlight band */
   --ember: #58868c;         /* primary teal — buttons, active state */
   --ember-dark: #416a6f;
+  --amber: #ebb305;         /* their secondary CTA colour */
   --steel: #58868c;
-  --ink-70: rgba(20, 38, 42, 0.74);
-  --ink-55: rgba(20, 38, 42, 0.56);
-  --ink-35: rgba(20, 38, 42, 0.34);
-  --hairline: rgba(20, 38, 42, 0.13);
-  --hairline-strong: rgba(20, 38, 42, 0.26);
+  --ink-70: rgba(51, 51, 51, 0.74);
+  --ink-55: rgba(51, 51, 51, 0.58);
+  --ink-35: rgba(51, 51, 51, 0.36);
+  --hairline: rgba(51, 51, 51, 0.13);
+  --hairline-strong: rgba(51, 51, 51, 0.26);
   --radius: 3px;
 }
 
@@ -154,3 +157,36 @@ td a { font-weight: 500; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 details > summary { cursor: pointer; }
 @media print { .noprint { display: none !important; } }
+
+/* ---------------------------------------------------------------- picker
+   Searchable multi-select. Replaces the chip walls — a 142-button list is
+   not a control, it is a haystack. Colours come from the tokens above so it
+   matches involve-consulting.com. */
+.picker { position: relative; margin-top: 8px; }
+.picker-input {
+  width: 100%; padding: 10px 12px; font-family: Montserrat, sans-serif;
+  font-size: 0.92rem; color: var(--ink); background: var(--paper);
+  border: 1px solid var(--hairline-strong); border-radius: var(--radius);
+}
+.picker-input:focus {
+  outline: 2px solid var(--ember); outline-offset: 1px; border-color: var(--ember);
+}
+.picker-menu {
+  position: absolute; z-index: 40; left: 0; right: 0; margin-top: 4px;
+  max-height: 280px; overflow-y: auto; background: var(--paper);
+  border: 1px solid var(--hairline-strong); border-radius: var(--radius);
+}
+.picker-opt {
+  display: block; width: 100%; text-align: left; padding: 10px 12px;
+  font-family: Montserrat, sans-serif; font-size: 0.9rem; color: var(--ink);
+  background: transparent; border: 0; border-bottom: 1px solid var(--hairline);
+  cursor: pointer; min-height: 44px;                 /* touch target */
+}
+.picker-opt:last-child { border-bottom: 0; }
+.picker-opt:hover, .picker-opt[data-active="1"] { background: var(--wash); }
+.picker-empty { padding: 12px; margin: 0; }
+.chip-remove { min-height: 36px; }
+.chip-remove:hover { background: var(--ember-dark); color: #fff; border-color: var(--ember-dark); }
+@media (prefers-reduced-motion: no-preference) {
+  .picker-opt { transition: background 120ms ease; }
+}

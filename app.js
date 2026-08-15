@@ -342,6 +342,140 @@
       return '<button type="button" class="chip" data-chip="' + group + '" data-value="' + esc(it.key) + '" aria-pressed="' + on + '">' + esc(it.label) + '</button>';
     }).join('') + '</div>';
   }
+  /**
+   * Searchable multi-select. Renders a filter box, a scrollable option list and
+   * the current selection as removable chips.
+   *
+   * The selected chips carry data-chip/aria-pressed exactly like the old wall,
+   * so chosen(group) keeps working unchanged — this is a UI swap, not a data
+   * model change.
+   */
+  function picker(group, items, chosen, placeholder) {
+    var id = 'pk-' + group;
+    var sel = (chosen || []).slice();
+    var chosenSet = {};
+    sel.forEach(function (v) { chosenSet[v] = 1; });
+    return '<div class="picker" data-picker="' + group + '" data-items="' +
+      esc(JSON.stringify(items)) + '">' +
+      '<div class="chipset picker-chosen" style="margin-bottom:10px">' +
+        items.filter(function (it) { return chosenSet[it.key]; }).map(function (it) {
+          return pickerChip(group, it);
+        }).join('') +
+      '</div>' +
+      '<label class="sr" for="' + id + '">Search ' + esc(placeholder || group) + '</label>' +
+      '<input id="' + id + '" class="picker-input" type="text" autocomplete="off" ' +
+        'placeholder="' + esc(placeholder || 'Type to search…') + '">' +
+      '<div class="picker-menu" hidden></div>' +
+      '<p class="small dim picker-count" style="margin-top:6px">' + items.length +
+        ' to choose from' + (sel.length ? ' · ' + sel.length + ' selected' : '') + '</p>' +
+      '</div>';
+  }
+
+  function pickerChip(group, it) {
+    return '<button type="button" class="chip chip-remove" data-chip="' + group + '" ' +
+      'data-picker-chip="1" data-value="' + esc(it.key) + '" aria-pressed="true" ' +
+      'title="Remove">' + esc(it.label) + '<span aria-hidden="true"> ×</span></button>';
+  }
+
+  /** Wire every picker on the page. Called from bind(). */
+  function bindPickers() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-picker]'), function (root) {
+      if (root.getAttribute('data-bound')) return;
+      root.setAttribute('data-bound', '1');
+      var group = root.getAttribute('data-picker');
+      var items = [];
+      try { items = JSON.parse(root.getAttribute('data-items')) || []; } catch (e) { items = []; }
+      var input = root.querySelector('.picker-input');
+      var menu = root.querySelector('.picker-menu');
+      var bag = root.querySelector('.picker-chosen');
+      var count = root.querySelector('.picker-count');
+      var active = -1;
+
+      function selected() {
+        return Array.prototype.slice.call(bag.querySelectorAll('[data-value]'))
+          .map(function (b) { return b.getAttribute('data-value'); });
+      }
+      function updateCount() {
+        var n = selected().length;
+        count.textContent = items.length + ' to choose from' + (n ? ' \u00b7 ' + n + ' selected' : '');
+      }
+      function close() { menu.hidden = true; menu.innerHTML = ''; active = -1; }
+
+      function open() {
+        var q = input.value.trim().toLowerCase();
+        var have = {};
+        selected().forEach(function (v) { have[v] = 1; });
+        var hits = items.filter(function (it) {
+          if (have[it.key]) return false;
+          return !q || it.label.toLowerCase().indexOf(q) >= 0;
+        }).slice(0, 60);
+        if (!hits.length) {
+          menu.innerHTML = '<p class="picker-empty small dim">' +
+            (q ? 'Nothing matches “' + esc(input.value.trim()) + '”' : 'Everything is already selected') + '</p>';
+          menu.hidden = false;
+          return;
+        }
+        menu.innerHTML = hits.map(function (it, i) {
+          return '<button type="button" class="picker-opt" role="option" data-value="' +
+            esc(it.key) + '" data-i="' + i + '"' + (i === active ? ' data-active="1"' : '') + '>' +
+            esc(it.label) + '</button>';
+        }).join('');
+        menu.hidden = false;
+      }
+
+      function add(key) {
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].key === key) {
+            bag.insertAdjacentHTML('beforeend', pickerChip(group, items[i]));
+            break;
+          }
+        }
+        input.value = '';
+        updateCount();
+        open();
+        input.focus();
+      }
+
+      input.addEventListener('focus', open);
+      input.addEventListener('input', function () { active = -1; open(); });
+      input.addEventListener('keydown', function (ev) {
+        var opts = menu.querySelectorAll('.picker-opt');
+        if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+          ev.preventDefault();
+          if (!opts.length) return;
+          active += (ev.key === 'ArrowDown' ? 1 : -1);
+          if (active < 0) active = opts.length - 1;
+          if (active >= opts.length) active = 0;
+          Array.prototype.forEach.call(opts, function (o, i) {
+            if (i === active) { o.setAttribute('data-active', '1'); o.scrollIntoView({ block: 'nearest' }); }
+            else o.removeAttribute('data-active');
+          });
+        } else if (ev.key === 'Enter') {
+          ev.preventDefault();
+          var pick = active >= 0 ? opts[active] : opts[0];
+          if (pick) add(pick.getAttribute('data-value'));
+        } else if (ev.key === 'Escape') {
+          close();
+        }
+      });
+      menu.addEventListener('mousedown', function (ev) {
+        var b = ev.target.closest ? ev.target.closest('.picker-opt') : null;
+        if (!b) return;
+        ev.preventDefault();
+        add(b.getAttribute('data-value'));
+      });
+      bag.addEventListener('click', function (ev) {
+        var b = ev.target.closest ? ev.target.closest('[data-picker-chip]') : null;
+        if (!b) return;
+        b.parentNode.removeChild(b);
+        updateCount();
+      });
+      document.addEventListener('click', function (ev) {
+        if (!root.contains(ev.target)) close();
+      });
+    });
+  }
+
   function tri(group, value, yes, no) {
     return '<div class="chipset" style="margin-top:8px">' +
       '<button type="button" class="chip" data-radio="' + group + '" data-value="yes" aria-pressed="' + (value === true) + '">' + esc(yes || 'Yes') + '</button>' +
@@ -402,19 +536,13 @@
           '<div><label class="field label" for="f-term">Intake term</label>' +
             sel('f-term', V.INTAKE_TERMS, p.intake_term, 'Not sure yet') + '</div>' +
         '</div>' +
-        '<div style="margin-top:18px"><p class="label">Course area</p>' + chips('course_groups', V.COURSE_GROUPS, p.course_groups) + '</div>' +
+        '<div style="margin-top:18px"><p class="label">Course area <span class="dim">(type to search)</span></p>' + picker('course_groups', V.COURSE_GROUPS, p.course_groups, 'Search course areas…') + '</div>' +
         '<div style="margin-top:18px"><label class="field label" for="f-course">Specific course or subject <span class="dim">(free text — matched against the funder’s own wording)</span></label>' +
           '<input id="f-course" type="text" placeholder="e.g. renewable energy engineering" value="' + esc((p.fields || []).join(', ')) + '"></div>' +
-        '<div style="margin-top:18px"><p class="label">Target universities <span class="dim">(' + SCHOOL_NAMES.length + ' with their own awards)</span></p>' +
-          '<div class="chipset" style="margin-top:8px">' + SCHOOL_NAMES.map(function (n) {
-            var on = (p.target_schools || []).indexOf(n) >= 0;
-            return '<button type="button" class="chip" data-chip="target_schools" data-value="' + esc(n) + '" aria-pressed="' + on + '">' + esc(n) + '</button>';
-          }).join('') + '</div></div>' +
+        '<div style="margin-top:18px"><p class="label">Target universities <span class="dim">(' + SCHOOL_NAMES.length + ' with their own awards — type to search)</span></p>' +
+          picker('target_schools', SCHOOL_NAMES.map(function (n) { return { key: n, label: n }; }), p.target_schools, 'Search universities…') + '</div>' +
         '<div style="margin-top:18px"><p class="label">Destination countries <span class="dim">(blank = open to anywhere)</span></p>' +
-          '<div class="chipset" style="margin-top:8px">' + destinationOptions().map(function (c) {
-            var on = (p.destinations || []).indexOf(c) >= 0;
-            return '<button type="button" class="chip" data-chip="destinations" data-value="' + esc(c) + '" aria-pressed="' + on + '">' + esc(cname(c)) + '</button>';
-          }).join('') + '</div></div>') +
+          picker('destinations', destinationOptions().map(function (c) { return { key: c, label: cname(c) }; }), p.destinations, 'Search countries…') + '</div>') +
 
       fieldset('3 · When you plan to apply', 'Cycles matter more than anything else on this site. Picking a year hides rounds that have already closed rather than showing you a deadline you cannot meet.',
         '<div class="grid grid-2"><div><label class="field label" for="f-year">Application year</label>' +
@@ -435,10 +563,7 @@
           '<div><label class="field label" for="f-enrolled">Currently enrolled full-time?</label>' + tri('enrolled_full_time', p.enrolled_full_time) + '</div>' +
         '</div>' +
         '<div style="margin-top:18px"><p class="label">Languages you can certify</p>' +
-          '<div class="chipset" style="margin-top:8px">' + V.LANGUAGES.map(function (l) {
-            var on = (p.certified_languages || []).indexOf(l) >= 0;
-            return '<button type="button" class="chip" data-chip="certified_languages" data-value="' + esc(l) + '" aria-pressed="' + on + '">' + esc(l) + '</button>';
-          }).join('') + '</div></div>') +
+          picker('certified_languages', V.LANGUAGES.map(function (l) { return { key: l, label: l }; }), p.certified_languages, 'Search languages…') + '</div>') +
 
       fieldset('5 · Tests and work', null,
         '<div class="grid grid-2">' +
@@ -1185,8 +1310,11 @@
       b.addEventListener('click', function () { b.textContent = toggleShortlist(b.getAttribute('data-save')) ? 'Saved ✓' : 'Save'; });
     });
     Array.prototype.forEach.call(document.querySelectorAll('[data-chip]'), function (b) {
+      // Picker chips are removed by their own handler, not toggled.
+      if (b.getAttribute('data-picker-chip')) return;
       b.addEventListener('click', function () { b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true'); });
     });
+    bindPickers();
     Array.prototype.forEach.call(document.querySelectorAll('[data-radio]'), function (b) {
       b.addEventListener('click', function () {
         var g = b.getAttribute('data-radio'), turnOn = b.getAttribute('aria-pressed') !== 'true';
