@@ -595,7 +595,9 @@
           '<div><label class="field label" for="f-term">Intake term</label>' +
             sel('f-term', V.INTAKE_TERMS, p.intake_term, 'Not sure yet') + '</div>' +
         '</div>' +
-        '<div style="margin-top:18px"><p class="label">Course area <span class="dim">(type to search)</span></p>' + picker('course_groups', V.COURSE_GROUPS, p.course_groups, 'Search course areas…') + '</div>' +
+        '<div id="courseArea" style="margin-top:18px"><p class="label">Course area <span class="dim">(type to search)</span></p>' + picker('course_groups', V.COURSE_GROUPS, p.course_groups, 'Search course areas…') + '</div>' +
+        '<div id="courseAreaMba" style="margin-top:18px" hidden><p class="label">Course area</p>' +
+          '<p class="small muted" style="margin-top:6px">An MBA is a management degree, so we search business and management funding automatically. Nothing to pick.</p></div>' +
         '<div style="margin-top:18px"><label class="field label" for="f-course">Specific course or subject <span class="dim">(free text, matched against the funder’s own wording)</span></label>' +
           '<input id="f-course" type="text" placeholder="e.g. renewable energy engineering" value="' + esc((p.fields || []).join(', ')) + '"></div>' +
         '<div style="margin-top:18px"><p class="label">Target universities <span class="dim">(' + SCHOOL_NAMES.length + ' with their own awards, type to search)</span></p>' +
@@ -1669,6 +1671,20 @@
       b.addEventListener('click', function () { b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true'); });
     });
     bindPickers();
+    // An MBA is a management degree by definition, so asking for the course
+    // area again is a question with one possible answer. Hide it and set
+    // business on submit instead.
+    var lvl = el('f-level');
+    if (lvl) {
+      var syncCourseArea = function () {
+        var isMba = lvl.value === 'mba';
+        var normal = el('courseArea'), mba = el('courseAreaMba');
+        if (normal) normal.hidden = isMba;
+        if (mba) mba.hidden = !isMba;
+      };
+      lvl.addEventListener('change', syncCourseArea);
+      syncCourseArea();
+    }
     var cp = el('calPrev'), cn = el('calNext'), ct = el('calToday');
     if (cp) cp.onclick = function () {
       calState.m--; if (calState.m < 0) { calState.m = 11; calState.y--; } render();
@@ -1768,7 +1784,7 @@
       nationality: nat, study_level: lvl, residence: el('f-res').value || nat,
       age: age, gender: el('f-gender').value || null,
       fields: course ? course.split(',').map(function (x) { return x.trim(); }).filter(Boolean) : [],
-      course_groups: chosen('course_groups'),
+      course_groups: el('f-level').value === 'mba' ? ['business'] : chosen('course_groups'),
       destinations: chosen('destinations'),
       target_schools: chosen('target_schools'),
       certified_languages: chosen('certified_languages'),
