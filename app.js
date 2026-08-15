@@ -162,6 +162,29 @@
     return titleCase(k);
   }
 
+  /**
+   * An award whose title pins it to one intake ("2025 Entry Scholarship") is
+   * finished when that date passes. One with no year in the title is the normal
+   * annual case: the published date has gone by, but it comes back. Saying
+   * "passed" for those reads as dead and is wrong.
+   */
+  var TITLE_YEAR_RE = /\b(20[0-3]\d)\b/g;
+  function namesACycle(title) {
+    TITLE_YEAR_RE.lastIndex = 0;
+    return TITLE_YEAR_RE.test(String(title || ''));
+  }
+  function isRecurring(rec) {
+    var d = rec && (rec.deadline_date || null);
+    if (!d) return false;
+    if (Date.parse(d) >= NOW.getTime()) return false;     // still ahead, not lapsed
+    return !namesACycle(rec.name);
+  }
+  /** The badge shown wherever a lapsed-but-annual award appears. */
+  function recurringBadge() {
+    return '<span class="badge badge-recurring" title="This award runs on an annual cycle. ' +
+      'The date shown is the last one the funder published.">RECURRING \u00b7 not yet open for this year</span>';
+  }
+
   function daysSince(iso) { var t = Date.parse(iso); return isNaN(t) ? null : Math.floor((NOW - t) / 86400000); }
   function daysUntil(iso) { var t = Date.parse(iso); return isNaN(t) ? null : Math.ceil((t - NOW) / 86400000); }
   function fmtDate(iso) {
@@ -1042,7 +1065,9 @@
       '<div class="row" style="margin-top:10px">' +
         (l.study_levels || []).map(function (x) { return '<span class="badge">' + esc(levelLabel(x)) + '</span>'; }).join('') +
         (l.deadline_verbatim && !l.deadline_date ? '<span class="badge badge-ember">' + esc(l.deadline_verbatim) + '</span>' : '') +
-        (l.deadline_date ? '<span class="badge' + (d >= 0 ? ' badge-ember' : ' badge-warn') + '">' + esc(fmtDate(l.deadline_date)) + (d >= 0 ? '' : ' \u00b7 passed') + '</span>' : '') +
+        (l.deadline_date && d >= 0 ? '<span class="badge badge-ember">' + esc(fmtDate(l.deadline_date)) + '</span>' : '') +
+        (l.deadline_date && d < 0 && isRecurring(l) ? recurringBadge() : '') +
+        (l.deadline_date && d < 0 && !isRecurring(l) ? '<span class="badge badge-warn">' + esc(fmtDate(l.deadline_date)) + ' \u00b7 closed</span>' : '') +
       '</div>' +
       '<p class="small dim" style="margin-top:10px">Listed by ' + esc(l.source_name || 'an official directory') +
       '. We have not yet checked the eligibility rules for this one — open the official page for the full conditions.</p>' +
@@ -1232,32 +1257,175 @@
       }).join('') + '</tbody></table></section></div>';
   }
 
-  function calendarPage() {
-    var slugs = loadShortlist();
-    if (!slugs.length) {
-      return '<div class="wrap section"><p class="eyebrow">MY CALENDAR</p><h1>Nothing saved yet</h1>' +
-        '<p class="muted" style="margin-top:14px;max-width:58ch">Save awards from your results or any record page, and their deadlines collect here as a downloadable calendar.</p>' +
-        '<div class="row" style="margin-top:22px"><a class="btn btn-primary" href="#/results">See my matches</a><a class="btn" href="#/explore/deadlines">Browse deadlines</a></div></div>';
+  /* ------------------------------------------------------------- calendar
+     A month grid you can page through, scoped to the visitor's own profile
+     when they have entered one. Everything currently open is listed below it,
+     because a calendar answers "when" and the list answers "what now".      */
+
+  var calState = { y: null, m: null, scope: 'auto', day: null };
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+                'July', 'August', 'September', 'October', 'November', 'December'];
+  var DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  function ymd(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+      '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  /** Which awards feed the calendar, and what to call that set. */
+  function calendarPool() {
+    var p = loadProfile();
+    var saved = loadShortlist().map(function (s) { return BY_SLUG[s]; }).filter(Boolean);
+    var hasProfile = !!(p && p.nationality && p.study_level);
+
+    if (calState.scope === 'saved') {
+      return { list: saved, label: 'your saved awards', hasProfile: hasProfile, scope: 'saved' };
     }
-    var picked = slugs.map(function (s) { return BY_SLUG[s]; }).filter(Boolean);
-    var entries = CORE.buildCalendar(picked);
-    var noDate = picked.filter(function (r) { return !r.deadline_date; });
-    return '<div class="wrap section"><p class="eyebrow">MY CALENDAR</p>' +
-      '<h1 style="margin-top:10px">' + picked.length + ' saved · ' + entries.length + ' dated event' + (entries.length === 1 ? '' : 's') + '</h1>' +
-      '<div class="row noprint" style="margin-top:20px"><button class="btn btn-primary" id="ics">Download .ics</button>' +
-      '<button class="btn" onclick="window.print()">Print / save as PDF</button></div>' +
-      '<div style="margin-top:26px">' + (!entries.length ? '<p class="null">None of your saved awards has a published deadline.</p>' :
-        '<table><thead><tr><th>Date</th><th>Event</th><th>In</th></tr></thead><tbody>' +
-        entries.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; }).map(function (e) {
-          var d = daysUntil(e.date);
-          return '<tr><td class="mono small" style="width:120px">' + esc(fmtDate(e.date)) + '</td>' +
-            '<td><a href="#/scholarships/' + esc(e.slug) + '">' + esc(e.title) + '</a></td>' +
-            '<td class="num small ' + (d < 0 ? 'dim' : '') + '">' + (d < 0 ? 'passed' : d + ' days') + '</td></tr>';
-        }).join('') + '</tbody></table>') + '</div>' +
-      (noDate.length ? '<div class="card" style="margin-top:24px"><p class="label">SAVED, NO PUBLISHED DEADLINE (' + noDate.length + ')</p>' +
-        '<p class="small muted" style="margin-top:8px">These stay on your list but cannot be given a calendar date without inventing one.</p><ul style="margin:10px 0 0;padding-left:18px">' +
-        noDate.map(function (r) { return '<li class="small"><a href="#/scholarships/' + esc(r.slug) + '">' + esc(r.name) + '</a></li>'; }).join('') + '</ul></div>' : '') +
-      '<div class="row noprint" style="margin-top:24px"><button class="btn btn-sm" id="clearList">Clear saved list</button></div></div>';
+    if (calState.scope === 'all' || !hasProfile) {
+      return { list: ALL, label: 'every award in the register', hasProfile: hasProfile, scope: 'all' };
+    }
+    // profile scope — the awards this person could actually hold
+    var pool = applyFilters(GENERAL, p);
+    if ((p.target_schools || []).length) {
+      pool = pool.concat(applyFilters(COLLEGE.filter(function (r) {
+        return p.target_schools.indexOf(r.school_name) >= 0;
+      }), p));
+    }
+    var out = CORE.matchScholarships(p, pool, NOW);
+    var mine = []
+      .concat(out.buckets.eligible_now || [])
+      .concat(out.buckets.eligible_if_you_act || [])
+      .concat(out.buckets.competitive_stretch || [])
+      .map(function (m) { return m.scholarship || m.record || m; })
+      .filter(Boolean);
+    var seen = {}, merged = [];
+    mine.concat(saved).forEach(function (r) {
+      if (r && r.slug && !seen[r.slug]) { seen[r.slug] = 1; merged.push(r); }
+    });
+    return { list: merged, label: 'awards matched to your profile', hasProfile: true, scope: 'profile' };
+  }
+
+  function calendarPage() {
+    var pool = calendarPool();
+    var now = new Date();
+    if (calState.y === null) { calState.y = now.getFullYear(); calState.m = now.getMonth(); }
+
+    // date -> [award]
+    var byDate = {};
+    pool.list.forEach(function (r) {
+      if (!r.deadline_date) return;
+      (byDate[r.deadline_date] = byDate[r.deadline_date] || []).push(r);
+    });
+
+    var first = new Date(calState.y, calState.m, 1);
+    var lead = (first.getDay() + 6) % 7;                  // Monday-first
+    var daysInMonth = new Date(calState.y, calState.m + 1, 0).getDate();
+    var todayKey = ymd(now);
+    var monthPrefix = calState.y + '-' + String(calState.m + 1).padStart(2, '0');
+    var inMonth = Object.keys(byDate).filter(function (k) { return k.indexOf(monthPrefix) === 0; });
+    var inMonthCount = inMonth.reduce(function (n, k) { return n + byDate[k].length; }, 0);
+
+    var cells = '';
+    for (var i = 0; i < lead; i++) cells += '<div class="cal-cell cal-out"></div>';
+    for (var day = 1; day <= daysInMonth; day++) {
+      var key = monthPrefix + '-' + String(day).padStart(2, '0');
+      var items = byDate[key] || [];
+      var isToday = key === todayKey;
+      var past = key < todayKey;
+      cells += '<div class="cal-cell' + (isToday ? ' cal-today' : '') + (past ? ' cal-past' : '') +
+        (items.length ? ' cal-has' : '') + '">' +
+        '<span class="cal-num">' + day + '</span>' +
+        (items.length
+          ? '<div class="cal-events">' +
+              items.slice(0, 3).map(function (r) {
+                return '<a class="cal-ev" href="#/scholarships/' + esc(r.slug) + '" title="' +
+                  esc(r.name) + '">' + esc(r.name) + '</a>';
+              }).join('') +
+              (items.length > 3 ? '<span class="cal-more">+' + (items.length - 3) + ' more</span>' : '') +
+            '</div>'
+          : '') +
+        '</div>';
+    }
+    var trail = (7 - ((lead + daysInMonth) % 7)) % 7;
+    for (var t = 0; t < trail; t++) cells += '<div class="cal-cell cal-out"></div>';
+
+    // ---- everything currently open, under the grid
+    var openNow = pool.list.filter(function (r) {
+      if (r.status === 'discontinued') return false;
+      if (!r.deadline_date) return r.status === 'open';
+      return Date.parse(r.deadline_date) >= now.getTime();
+    }).sort(function (a, b) {
+      if (!a.deadline_date) return 1;
+      if (!b.deadline_date) return -1;
+      return a.deadline_date < b.deadline_date ? -1 : 1;
+    });
+    var recurringSoon = pool.list.filter(isRecurring);
+
+    var scopeBtn = function (k, label) {
+      return '<button type="button" class="btn btn-sm cal-scope" data-scope="' + k + '"' +
+        (pool.scope === k ? ' aria-pressed="true"' : '') + '>' + esc(label) + '</button>';
+    };
+
+    return '<div class="wrap section"><p class="eyebrow">DEADLINE CALENDAR</p>' +
+      '<h1 style="margin-top:10px">When these close</h1>' +
+      '<p class="muted" style="margin-top:12px;max-width:64ch">Showing ' + esc(pool.label) +
+      ' \u2014 ' + pool.list.length.toLocaleString() + ' award' + (pool.list.length === 1 ? '' : 's') +
+      '. Dates are the ones funders published; nothing here is inferred.' +
+      (!pool.hasProfile ? ' <a href="#intake">Tell us about you</a> and this narrows to awards you can actually hold.' : '') +
+      '</p>' +
+
+      '<div class="row noprint" style="margin-top:18px">' +
+        scopeBtn('auto', pool.hasProfile ? 'My matches' : 'My matches (needs profile)') +
+        scopeBtn('saved', 'Saved only') +
+        scopeBtn('all', 'Everything') +
+      '</div>' +
+
+      '<div class="cal-head noprint">' +
+        '<button type="button" class="btn btn-sm" id="calPrev" aria-label="Previous month">\u2039</button>' +
+        '<h2 class="cal-title">' + MONTHS[calState.m] + ' ' + calState.y + '</h2>' +
+        '<button type="button" class="btn btn-sm" id="calNext" aria-label="Next month">\u203a</button>' +
+        '<button type="button" class="btn btn-sm" id="calToday">Today</button>' +
+        '<span class="grow"></span>' +
+        '<span class="small dim">' + inMonthCount + ' deadline' + (inMonthCount === 1 ? '' : 's') + ' this month</span>' +
+      '</div>' +
+
+      '<div class="cal-dow">' + DOW.map(function (d) { return '<span>' + d + '</span>'; }).join('') + '</div>' +
+      '<div class="cal-grid">' + cells + '</div>' +
+
+      (recurringSoon.length
+        ? '<div class="card" style="margin-top:22px"><p class="label">RUNS EVERY YEAR, NOT YET OPEN (' + recurringSoon.length + ')</p>' +
+          '<p class="small muted" style="margin-top:8px;max-width:66ch">The funder has not published the next round yet. The month below is when it closed last time, which is the best guide to when to look again. We do not move dates forward.</p>' +
+          '<ul style="margin:12px 0 0;padding-left:18px">' +
+          recurringSoon.slice(0, 25).map(function (r) {
+            return '<li class="small"><a href="#/scholarships/' + esc(r.slug) + '">' + esc(r.name) + '</a>' +
+              ' <span class="dim">\u2014 last closed ' + esc(fmtDate(r.deadline_date)) + '</span></li>';
+          }).join('') +
+          (recurringSoon.length > 25 ? '<li class="small dim">and ' + (recurringSoon.length - 25) + ' more</li>' : '') +
+          '</ul></div>'
+        : '') +
+
+      '<section class="bucket" style="margin-top:30px"><div class="bucket-head b1"><div class="spread">' +
+        '<h2>Open now</h2><p class="data">' + openNow.length + '</p></div></div>' +
+        '<p class="muted small" style="margin-top:6px;max-width:66ch">Every award in this set that is still accepting applications, soonest deadline first. Awards with no published closing date sit at the end \u2014 those are usually rolling.</p>' +
+        (openNow.length
+          ? '<div style="overflow-x:auto;margin-top:14px"><table><thead><tr><th>Closes</th><th>Award</th><th>Funder</th><th class="num">In</th></tr></thead><tbody>' +
+            openNow.slice(0, 200).map(function (r) {
+              var d = r.deadline_date ? daysUntil(r.deadline_date) : null;
+              return '<tr><td class="mono small" style="width:130px">' +
+                (r.deadline_date ? esc(fmtDate(r.deadline_date)) : '<span class="dim">rolling</span>') + '</td>' +
+                '<td><a href="#/scholarships/' + esc(r.slug) + '">' + esc(r.name) + '</a></td>' +
+                '<td class="small dim">' + esc(r.funder_name || '') + '</td>' +
+                '<td class="num small">' + (d === null ? '\u2014' : d + ' days') + '</td></tr>';
+            }).join('') + '</tbody></table></div>' +
+            (openNow.length > 200 ? '<p class="small dim" style="margin-top:10px">Showing the first 200 of ' + openNow.length + '. Narrow the set with your profile or use <a href="#/explore/deadlines">deadlines by month</a>.</p>' : '')
+          : '<p class="null">Nothing in this set is currently open.</p>') +
+      '</section>' +
+
+      '<div class="row noprint" style="margin-top:24px">' +
+        '<button class="btn btn-primary" id="ics">Download .ics</button>' +
+        '<button class="btn" onclick="window.print()">Print / save as PDF</button>' +
+        '<button class="btn btn-sm" id="clearList">Clear saved list</button>' +
+      '</div></div>';
   }
 
   function methodologyPage() {
@@ -1315,6 +1483,19 @@
       b.addEventListener('click', function () { b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true'); });
     });
     bindPickers();
+    var cp = el('calPrev'), cn = el('calNext'), ct = el('calToday');
+    if (cp) cp.onclick = function () {
+      calState.m--; if (calState.m < 0) { calState.m = 11; calState.y--; } render();
+    };
+    if (cn) cn.onclick = function () {
+      calState.m++; if (calState.m > 11) { calState.m = 0; calState.y++; } render();
+    };
+    if (ct) ct.onclick = function () {
+      var n = new Date(); calState.y = n.getFullYear(); calState.m = n.getMonth(); render();
+    };
+    Array.prototype.forEach.call(document.querySelectorAll('.cal-scope'), function (b) {
+      b.onclick = function () { calState.scope = b.getAttribute('data-scope'); render(); };
+    });
     Array.prototype.forEach.call(document.querySelectorAll('[data-radio]'), function (b) {
       b.addEventListener('click', function () {
         var g = b.getAttribute('data-radio'), turnOn = b.getAttribute('aria-pressed') !== 'true';

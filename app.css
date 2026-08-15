@@ -190,3 +190,48 @@ details > summary { cursor: pointer; }
 @media (prefers-reduced-motion: no-preference) {
   .picker-opt { transition: background 120ms ease; }
 }
+
+/* ------------------------------------------------------------- calendar
+   Month grid. Deliberately flat and quiet: the awards are the content, the
+   grid is only scaffolding. Tokens are the involve-consulting.com ones. */
+.cal-head { display: flex; align-items: center; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
+.cal-title { font-size: 1.25rem; margin: 0; min-width: 190px; }
+.cal-dow {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 14px;
+  font-family: Montserrat, sans-serif; font-size: 0.68rem; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-55);
+}
+.cal-dow span { padding: 0 6px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 6px; }
+.cal-cell {
+  min-height: 104px; padding: 6px; border: 1px solid var(--hairline);
+  border-radius: var(--radius); background: var(--paper); overflow: hidden;
+}
+.cal-out { background: transparent; border-color: transparent; }
+.cal-past { background: #fbfbfb; }
+.cal-past .cal-num { color: var(--ink-35); }
+.cal-has { border-color: var(--hairline-strong); }
+.cal-today { border: 2px solid var(--ember); background: var(--wash); }
+.cal-num { font-family: Montserrat, sans-serif; font-size: 0.78rem; color: var(--ink-55); font-weight: 600; }
+.cal-today .cal-num { color: var(--ember-dark); }
+.cal-events { display: flex; flex-direction: column; gap: 3px; margin-top: 5px; }
+.cal-ev {
+  display: block; font-size: 0.68rem; line-height: 1.25; padding: 3px 5px;
+  background: var(--ember); color: #fff; border-radius: 2px; text-decoration: none;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cal-ev:hover { background: var(--ember-dark); }
+.cal-more { font-size: 0.64rem; color: var(--ink-55); padding-left: 4px; }
+.cal-scope[aria-pressed="true"] { background: var(--ember); color: #fff; border-color: var(--ember); }
+.badge-recurring { background: var(--cream); border-color: rgba(51,51,51,0.2); color: var(--ink); }
+
+@media (max-width: 720px) {
+  /* A 7-column grid at phone width gives 45px cells — unreadable. Stack to a
+     list of days that actually have something in them. */
+  .cal-dow { display: none; }
+  .cal-grid { grid-template-columns: 1fr; gap: 6px; }
+  .cal-cell { min-height: 0; display: none; }
+  .cal-cell.cal-has, .cal-cell.cal-today { display: block; }
+  .cal-cell.cal-has .cal-num::after { content: ' \00b7 deadline'; font-weight: 400; color: var(--ink-55); }
+  .cal-ev { white-space: normal; }
+}
