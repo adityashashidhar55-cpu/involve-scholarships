@@ -732,7 +732,8 @@
   }
 
   function statTile(n, label) {
-    return '<div class="card"><p class="data" style="font-size:2rem">' + esc(n) + '</p><p class="label" style="margin-top:6px">' + esc(label) + '</p></div>';
+    return '<div class="card stat"><p class="stat-n">' + esc(n) + '</p>' +
+      '<p class="stat-l">' + esc(label) + '</p></div>';
   }
 
   // ----------------------------------------------------------------- results

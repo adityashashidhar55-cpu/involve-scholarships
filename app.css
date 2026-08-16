@@ -64,9 +64,23 @@ a:hover { text-decoration: underline; }
 .stack > * + * { margin-top: 14px; }
 .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .spread { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; }
-.grid { display: grid; gap: 16px; }
+.grid { display: grid; gap: 16px; align-items: stretch; }
 @media (min-width: 700px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
-@media (min-width: 900px) { .grid-3 { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 640px) { .grid-3 { grid-template-columns: repeat(3, 1fr); } }
+/* Cards stacked in a column are separated by `.card + .card`. Inside a grid
+   the gap already does that, and the stray margin pushed every tile after
+   the first down by 14px, so a row of three read as three different sizes. */
+.grid > .card + .card { margin-top: 0; }
+
+/* --- stat tiles --- */
+/* The number sits at the top of every tile, so the row reads on one line
+   whatever the labels do, and the grid keeps the boxes the same height. */
+.stat { display: flex; flex-direction: column; gap: 9px; padding: 22px 24px 24px; }
+.stat-n {
+  font-size: clamp(2rem, 3.4vw, 2.6rem); line-height: 1; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1;
+}
+.stat-l { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-55); margin: 0; }
 
 /* --- chrome --- */
 header.nav { position: sticky; top: 0; z-index: 40; background: var(--paper); border-bottom: 1px solid var(--hairline); }
