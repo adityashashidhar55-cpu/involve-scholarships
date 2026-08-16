@@ -773,6 +773,35 @@
     });
   }
 
+  /**
+   * Shown when the read-line-by-line register has nothing for a profile.
+   * It names the reason, points at the destinations in the directory that do
+   * have matching rows, and offers to widen the two fields that most often
+   * cause an empty result. Anything is better than a page of zeros.
+   */
+  function emptyResultsFallback(p) {
+    var dests = (p.destinations || []).filter(function (d) { return d && d !== 'any'; });
+    var lvl = p.study_level ? levelLabel(p.study_level) : 'your level';
+    var links = dests.length ? dests : ['GB', 'DE', 'FR', 'NL', 'ES'];
+    return '<div class="card card-help" style="margin-top:26px">' +
+      '<p class="label">NOTHING IN THE VERIFIED REGISTER FOR THIS COMBINATION YET</p>' +
+      '<p class="small muted" style="margin-top:8px;max-width:66ch">' +
+        'No award we have read rule by rule fits ' + esc(lvl) +
+        (dests.length ? ' in ' + esc(dests.map(cname).join(', ')) : '') +
+        ' for your nationality. That is a gap in what we have verified, not proof that no funding exists. ' +
+        'The directory below covers the same destinations and is much larger, though its eligibility is unchecked.</p>' +
+      '<div class="row" style="margin-top:14px">' +
+        links.slice(0, 6).map(function (cc) {
+          return '<a class="btn btn-sm btn-primary" href="#/directory/' + esc(cc) + '">' +
+            esc(cname(cc)) + ' directory</a>';
+        }).join('') +
+        '<a class="btn btn-sm" href="#/intake">Widen my profile</a>' +
+        '<a class="btn btn-sm" href="https://involve-consulting.com/contact-us/" target="_blank" rel="noopener">Ask a consultant</a>' +
+      '</div>' +
+      '<p class="small dim" style="margin-top:12px">Two fields close the most doors: a single destination, and a course area narrower than the funder’s own wording. Widening either usually brings awards back.</p>' +
+      '</div>';
+  }
+
   function resultsPage() {
     var p = loadProfile();
     if (!p || !p.nationality || !p.study_level) {
@@ -826,6 +855,13 @@
         order.slice(0, 3).map(function (k) {
           return '<div class="card card-tight"><p class="count">' + out.buckets[k].length + '</p><p class="label" style="margin-top:4px">' + esc(BUCKET_META[k].title) + '</p></div>';
         }).join('') + '</div>';
+
+    // A blank results page is the worst thing this site can show. If every
+    // bucket that matters is empty, say why and hand over the directory rows
+    // that fit the destination and level, rather than rendering nothing.
+    var liveCount = out.buckets.eligible_now.length + out.buckets.eligible_if_you_act.length +
+      out.buckets.competitive_stretch.length;
+    if (!liveCount) html += emptyResultsFallback(p);
 
     order.forEach(function (k) {
       var list = out.buckets[k], meta = BUCKET_META[k];

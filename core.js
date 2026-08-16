@@ -1098,7 +1098,10 @@ function fitScore(profile                  , s             )         {
 
   let level        ;
   if (!profile.study_level || !isList(s.study_levels)) level = 0.5;
-  else level = s.study_levels.includes(profile.study_level) ? 1 : 0;
+  else if (s.study_levels.includes(profile.study_level)) level = 1;
+  // A parent-level match is a real match, but an award that names your exact
+  // level should rank above one that merely covers it.
+  else level = levelCovered(s, profile.study_level) ? 0.8 : 0;
 
   return 0.4 * field + 0.3 * destination + 0.3 * level;
 }
@@ -1182,6 +1185,50 @@ function published   (list                                 )                    
   return Array.isArray(list) && list.length > 0;
 }
 
+/**
+ * An MBA is a taught master's degree, and an MiM is a master's in management.
+ * Funders overwhelmingly write "master's" and fund both. Treating 'mba' as a
+ * level unrelated to 'masters' meant an MBA applicant matched nothing at all:
+ * Chevening, Felix, Charpak, GREAT, Commonwealth and Fundación Carolina all
+ * fund MBAs and all were being filtered out.
+ *
+ * The exception is real and must be respected. ANID's Becas Chile says, in so
+ * many words, "Se excluyen programas de Magíster en Administración de empresas
+ * o negocios". So the parent level is accepted by default and an explicit
+ * exclusion in the funder's own wording takes it away again.
+ */
+var LEVEL_PARENT = { mba: 'masters', mim: 'masters', emba: 'masters' };
+
+var MBA_EXCLUDED = new RegExp(
+  '(?:excludes?|excluding|not eligible|ineligible|are excluded|se excluyen|no se financian|sind ausgeschlossen)' +
+  '[^.;]{0,90}(?:mba|business administration|administración de empresas|administracion de empresas)' +
+  '|(?:mba|business administration|administración de empresas|administracion de empresas)' +
+  '[^.;]{0,90}(?:are not eligible|is not eligible|are excluded|is excluded|se excluyen|not funded|are not funded)',
+  'i');
+
+function excludesMba(s             )          {
+  if (s && s.excludes_levels && s.excludes_levels.indexOf('mba') >= 0) return true;
+  var hay = [s && s.source_snippet, s && s.nomination_note, s && s.deadline_note]
+    .concat((s && s.criteria ? s.criteria : []).map(function (c) {
+      return (c && (c.rule_verbatim || c.rule || c.note)) || '';
+    }))
+    .filter(Boolean).join(' ');
+  return MBA_EXCLUDED.test(hay);
+}
+
+/**
+ * Does this record's published level list cover the applicant's level?
+ * Exact match first, then the parent level for MBA-family programmes.
+ */
+function levelCovered(s             , level         )          {
+  if (!published(s.study_levels)) return true;
+  if (s.study_levels.indexOf(level) >= 0) return true;
+  var parent = LEVEL_PARENT[level];
+  if (!parent) return false;
+  if (s.study_levels.indexOf(parent) < 0) return false;
+  return !excludesMba(s);
+}
+
 function prefilter(profile                  , s             )                {
   if (profile.nationality) {
     const nat = profile.nationality;
@@ -1192,8 +1239,10 @@ function prefilter(profile                  , s             )                {
       return `Pre-filter: nationality ${nat} is not in eligible_nationalities [${s.eligible_nationalities.join(', ')}].`;
     }
   }
-  if (profile.study_level && published(s.study_levels) && !s.study_levels.includes(profile.study_level)) {
-    return `Pre-filter: study level "${profile.study_level}" is not in study_levels [${s.study_levels.join(', ')}].`;
+  if (profile.study_level && published(s.study_levels) && !levelCovered(s, profile.study_level)) {
+    return `Pre-filter: study level "${profile.study_level}" is not in study_levels [${s.study_levels.join(', ')}]` +
+      (LEVEL_PARENT[profile.study_level] && s.study_levels.includes(LEVEL_PARENT[profile.study_level])
+        ? ', and the funder excludes MBA programmes in its own wording.' : '.');
   }
   if (
     profile.destinations &&
