@@ -1065,9 +1065,9 @@
     if (svcCount.resume || svcCount.consulting) {
       summary = '<div class="banner" style="margin-top:16px"><p class="label">WHERE INVOLVE HELPS ON THIS ONE</p>' +
         (svcCount.resume ? '<p class="small" style="margin-top:8px">' + svcCount.resume + ' item' + (svcCount.resume === 1 ? '' : 's') +
-          ' need a CV in academic format. See ' + esc(V.HELP_COPY.resume.url) + '" target="_blank" rel="noreferrer">Involve Resume</a>.</p>' : '') +
+          ' need a CV in academic format. See <a href="' + esc(V.HELP_COPY.resume.url) + '" target="_blank" rel="noreferrer">Involve Resume</a>.</p>' : '') +
         (svcCount.consulting ? '<p class="small" style="margin-top:6px">' + svcCount.consulting + ' item' + (svcCount.consulting === 1 ? '' : 's') +
-          ' are essays, statements, references or interviews. See ' + esc(V.HELP_COPY.consulting.url) + '" target="_blank" rel="noreferrer">Involve Consulting</a>.</p>' : '') +
+          ' are essays, statements, references or interviews. See <a href="' + esc(V.HELP_COPY.consulting.url) + '" target="_blank" rel="noreferrer">Involve Consulting</a>.</p>' : '') +
         '</div>';
     }
 
@@ -1271,11 +1271,46 @@
       'which is what separates these from the matched results elsewhere on this site.</p>';
   }
 
+  /**
+   * Where the link actually goes.
+   *
+   * Some funders publish a page per award. Plenty do not: the University of
+   * Toronto Award Explorer, Queen's, NTU and others keep every award on one
+   * searchable list with no permalink. Linking an award name straight into
+   * that list looks broken, because you click a name and land on a search
+   * box. So a listing whose URL is shared with other awards, or is a bare
+   * domain root, is marked link_kind:'index' at build time and gets said out
+   * loud here instead of pretending to be the award's own page.
+   */
+  function linkHost(u) {
+    try { return String(u).split('/')[2].replace(/^www\./, ''); } catch (e) { return 'the funder site'; }
+  }
+
+  function listingLink(l) {
+    if (!l.detail_url) return esc(l.name);
+    var href = esc(l.detail_url), name = esc(l.name);
+    if (l.link_kind !== 'index') {
+      return '<a href="' + href + '" target="_blank" rel="noreferrer">' + name + '</a>';
+    }
+    return name;
+  }
+
+  function listingLinkNote(l) {
+    if (!l.detail_url) return '';
+    var href = esc(l.detail_url);
+    if (l.link_kind !== 'index') return '';
+    return '<p class="small" style="margin-top:10px">' +
+      '<a class="btn btn-sm" href="' + href + '" target="_blank" rel="noreferrer">Open ' +
+      esc(linkHost(l.detail_url)) + ' award list</a> ' +
+      '<span class="dim">This funder keeps every award on one searchable list, so search it for ' +
+      '“' + esc(l.name) + '”.</span></p>';
+  }
+
   function directoryCard(l) {
     var d = l.deadline_date ? daysUntil(l.deadline_date) : null;
     return '<article class="card"><div class="spread"><div style="min-width:0">' +
       (l.funder_name ? '<p class="label">' + esc(l.funder_name) + '</p>' : '') +
-      '<h3 style="margin-top:5px">' + (l.detail_url ? '<a href="' + esc(l.detail_url) + '" target="_blank" rel="noreferrer">' + esc(l.name) + '</a>' : esc(l.name)) + '</h3>' +
+      '<h3 style="margin-top:5px">' + listingLink(l) + '</h3>' +
       '</div><span class="badge badge-warn">DIRECTORY LISTING</span></div>' +
       (l.summary ? '<p class="small muted" style="margin-top:10px">' + esc(String(l.summary).slice(0, 260)) + '</p>' : '') +
       '<div class="row" style="margin-top:10px">' +
@@ -1285,6 +1320,7 @@
         (l.deadline_date && d < 0 && isRecurring(l) ? recurringBadge() : '') +
         (l.deadline_date && d < 0 && !isRecurring(l) ? '<span class="badge badge-warn">' + esc(fmtDate(l.deadline_date)) + ' \u00b7 closed</span>' : '') +
       '</div>' +
+      listingLinkNote(l) +
       '<p class="small dim" style="margin-top:10px">Listed by ' + esc(l.source_name || 'an official directory') +
       '. We have not yet checked the eligibility rules for this one. Open the official page for the full conditions.</p>' +
       '</article>';
