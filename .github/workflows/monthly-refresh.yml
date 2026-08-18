@@ -1,0 +1,76 @@
+# Roll the data forward on the first of every month.
+#
+# The site promises on the hub that it is refreshed monthly, so this is what
+# keeps that promise true. It needs no secrets and no network beyond the
+# checkout: everything it changes is derived from dates that have passed.
+#
+# It deliberately does not re-read funder pages. That needs a Firecrawl key
+# and human judgement about wording, and it is done as a separate assisted
+# pass rather than by an unattended job.
+name: Monthly data refresh
+
+on:
+  schedule:
+    # 06:00 UTC on the 1st. Early enough that the hub is correct before
+    # anyone in Europe or India looks at it.
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: monthly-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Roll deadlines forward and restamp
+        id: refresh
+        run: |
+          python tools/monthly_refresh.py | tee refresh.log
+          {
+            echo 'summary<<EOF'
+            cat refresh.log
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+          rm -f refresh.log
+
+      - name: Check the data still parses
+        run: |
+          python - <<'PY'
+          import json, glob, sys
+          idx = json.load(open('data-listings-index.json'))
+          core = json.load(open('data-core.json'))
+          stamp = json.load(open('data-refresh.json'))
+          assert core['counts']['scholarships'] == len(core['scholarships'])
+          total = 0
+          for shard in idx['shards']:
+              for part in shard['parts']:
+                  total += len(json.load(open(part['file']))['listings'])
+          assert total == idx['total'], f"index says {idx['total']}, shards hold {total}"
+          assert stamp['refreshed_at'] and stamp['cadence'] == 'monthly'
+          print(f"ok: {core['counts']['scholarships']} verified, {total} listings, stamped {stamp['refreshed_at']}")
+          PY
+
+      - name: Commit if anything moved
+        run: |
+          git config user.name  'Involve refresh bot'
+          git config user.email 'actions@github.com'
+          if git diff --quiet; then
+            echo 'nothing changed; no commit'
+            exit 0
+          fi
+          git add -A
+          git commit -m "Monthly data refresh
+
+          ${{ steps.refresh.outputs.summary }}"
+          git push

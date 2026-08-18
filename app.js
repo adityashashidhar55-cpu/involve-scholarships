@@ -85,6 +85,51 @@
       .catch(function () { listingsLoaded = true; if (then) then(); });
   }
 
+  /**
+   * The refresh stamp. Its own small file so the hub can show the date
+   * without waiting on a 2 MB payload first, and so the monthly CI job has
+   * exactly one thing to write.
+   */
+  var REFRESH = null;
+  function ensureRefresh() {
+    if (REFRESH || !window.fetch) return;
+    REFRESH = {};                       // in flight; do not ask twice
+    window.fetch('data-refresh.json' + DATA_V)
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { if (j) { REFRESH = j; paintRefreshLine(); render(); } })
+      .catch(function () { /* the line simply does not appear */ });
+  }
+
+  function refreshedOn() {
+    var d = REFRESH && REFRESH.refreshed_at;
+    if (!d) return null;
+    var t = Date.parse(d + 'T00:00:00Z');
+    return isNaN(t) ? null : fmtDate(d);
+  }
+
+  /**
+   * One sentence, used on the home page and the directory hub. Says the
+   * cadence and the date, because a cadence with no date is a claim nobody
+   * can check.
+   */
+  function refreshNote(extraStyle) {
+    var when = refreshedOn();
+    return '<p class="small dim"' + (extraStyle ? ' style="' + extraStyle + '"' : '') + '>' +
+      'Checked and refreshed once a month' +
+      (when ? '. Last refreshed ' + esc(when) : '') +
+      '. Deadlines roll over, closed rounds are marked, and finished cycles drop out.</p>';
+  }
+
+  // The footer lives in index.html, so it is filled in rather than rendered.
+  function paintRefreshLine() {
+    var slot = el('refresh-stamp');
+    if (!slot) return;
+    var when = refreshedOn();
+    slot.textContent = when
+      ? 'Refreshed monthly. Last refreshed ' + when + '.'
+      : 'Refreshed monthly.';
+  }
+
   function shardMeta(cc) {
     if (!LISTING_INDEX) return null;
     for (var i = 0; i < LISTING_INDEX.shards.length; i++) {
@@ -588,6 +633,7 @@
         statTile(GENERAL.filter(function (r) { return r.status === 'open'; }).length, 'currently open') +
         statTile(COLLEGE.length || '0', 'university-run, listed separately') +
       '</div>' +
+      refreshNote('margin-top:18px;max-width:62ch') +
     '</section>';
   }
 
@@ -1382,6 +1428,7 @@
         statTile(idx.sources, 'source databases') +
       '</div>' +
       '<p class="muted small" style="margin-top:22px;max-width:64ch">Pick a destination. Each one loads on its own, so you never download the whole set.</p>' +
+      refreshNote('margin-top:12px;max-width:64ch') +
       '<div style="overflow-x:auto;margin-top:14px"><table><thead><tr><th>Destination</th><th class="num">Listings</th></tr></thead><tbody>' +
       shards.map(function (s) {
         return '<tr><td><a href="#/directory/' + esc(s.country) + '">' +
@@ -1475,6 +1522,7 @@
       '<p class="small"><a href="#/directory">Funding directory</a> <span class="dim">/</span> ' + esc(label) + '</p>' +
       '<h1 style="margin-top:14px">' + esc(cc === 'XX' ? 'Awards not tied to one country' : 'Scholarships in ' + label) + '</h1>' +
       '<p class="muted" style="margin-top:10px">' + Number(meta.count).toLocaleString() + ' listings from official sources.</p>' +
+      refreshNote('margin-top:8px;max-width:64ch') +
       directoryCaveat() +
       '<div class="row" id="dirControls" style="margin-top:20px"></div>' +
       '<div id="dirList"><p class="muted" style="margin-top:16px">Loading…</p></div>' +
@@ -1955,6 +2003,7 @@
     render();
     // Warm the university file straight after first paint so the Universities
     // page and school filters are ready by the time anyone reaches them.
+    ensureRefresh();
     if (window.requestIdleCallback) window.requestIdleCallback(function () { ensureUniversities(); ensureListings(); });
     else window.setTimeout(function () { ensureUniversities(); ensureListings(); }, 1200);
   }
