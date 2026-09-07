@@ -9,6 +9,13 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="./app.css">
+<script>window.INVOLVE_SITE="scholarships";</script>
+<script>
+/* Involve traffic counter. First-party, cookieless: sets nothing on this
+   device and reads nothing from it. Sends the path with any query string
+   stripped, the referring host, and which site. Nothing else, ever. */
+(function(){var EP='https://aojnpekquzpwitkyhaai.supabase.co/functions/v1/hit';var SITE=(window.INVOLVE_SITE||'main');function send(ev,extra){try{var b={site:SITE,event:ev,path:(location.pathname||'/').split('?')[0].split('#')[0],referrer:document.referrer||''};if(extra&&extra.tool) b.tool=extra.tool;var s=JSON.stringify(b);if(navigator.sendBeacon){navigator.sendBeacon(EP,new Blob([s],{type:'application/json'}));} else {fetch(EP,{method:'POST',headers:{'content-type':'application/json'},body:s,keepalive:true}).catch(function(){});}}catch(e){}}window.involveHit=send;if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){send('pageview');});else send('pageview');window.addEventListener('hashchange',function(){send('pageview');});})();
+</script>
 </head>
 <body>
 <header class="nav noprint">
