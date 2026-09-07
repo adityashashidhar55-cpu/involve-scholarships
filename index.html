@@ -11,10 +11,15 @@
 <link rel="stylesheet" href="./app.css">
 <script>window.INVOLVE_SITE="scholarships";</script>
 <script>
-/* Involve traffic counter. First-party, cookieless: sets nothing on this
-   device and reads nothing from it. Sends the path with any query string
-   stripped, the referring host, and which site. Nothing else, ever. */
-(function(){var EP='https://aojnpekquzpwitkyhaai.supabase.co/functions/v1/hit';var SITE=(window.INVOLVE_SITE||'main');function send(ev,extra){try{var b={site:SITE,event:ev,path:(location.pathname||'/').split('?')[0].split('#')[0],referrer:document.referrer||''};if(extra&&extra.tool) b.tool=extra.tool;var s=JSON.stringify(b);if(navigator.sendBeacon){navigator.sendBeacon(EP,new Blob([s],{type:'application/json'}));} else {fetch(EP,{method:'POST',headers:{'content-type':'application/json'},body:s,keepalive:true}).catch(function(){});}}catch(e){}}window.involveHit=send;if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){send('pageview');});else send('pageview');window.addEventListener('hashchange',function(){send('pageview');});})();
+/* Involve traffic counter. First-party and cookieless: it sets nothing on this
+   device and reads nothing from it. It sends the path with any query string
+   already stripped, the referring host, and which site. Nothing else, ever.
+
+   The Blob is text/plain deliberately. application/json is not a CORS-safelisted
+   content type, so it forces a preflight, and sendBeacon cannot do a preflight -
+   it fails silently and the visit is never counted. text/plain goes straight
+   through, and the endpoint reads the body regardless of what the header says. */
+(function(){var EP='https://aojnpekquzpwitkyhaai.supabase.co/functions/v1/hit';var SITE=(window.INVOLVE_SITE||'main');function send(ev,extra){try{var b={site:SITE,event:ev,path:(location.pathname||'/').split('?')[0].split('#')[0],referrer:document.referrer||''};if(extra&&extra.tool) b.tool=extra.tool;var s=JSON.stringify(b);if(navigator.sendBeacon){navigator.sendBeacon(EP,new Blob([s],{type:'text/plain'}));} else {fetch(EP,{method:'POST',headers:{'content-type':'application/json'},body:s,keepalive:true}).catch(function(){});}}catch(e){}}window.involveHit=send;if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){send('pageview');});else send('pageview');window.addEventListener('hashchange',function(){send('pageview');});})();
 </script>
 </head>
 <body>
