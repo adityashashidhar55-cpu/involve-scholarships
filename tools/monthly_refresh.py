@@ -151,15 +151,20 @@ def write_stamp(register, listings, countries, opened, closed, dropped):
 def bump_cache_version(register, listings):
     """Browsers cache the data files hard. Without a new query string a
     refreshed deadline would not reach anyone for weeks."""
-    p = os.path.join(ROOT, 'index.html')
-    with open(p, encoding='utf-8') as f:
-        html = f.read()
     new = f'{register}-318-{listings}-{TODAY.replace("-", "")}'
-    out = re.sub(r'window\.INVOLVE_DATA_V="[^"]*"',
-                 f'window.INVOLVE_DATA_V="{new}"', html)
-    if out != html:
-        with open(p, 'w', encoding='utf-8') as f:
-            f.write(out)
+    # 404.html runs the same app, so it needs the same version or it serves
+    # last month's cached data.
+    for name in ('index.html', '404.html'):
+        p = os.path.join(ROOT, name)
+        if not os.path.exists(p):
+            continue
+        with open(p, encoding='utf-8') as f:
+            html = f.read()
+        out = re.sub(r'window\.INVOLVE_DATA_V="[^"]*"',
+                     f'window.INVOLVE_DATA_V="{new}"', html)
+        if out != html:
+            with open(p, 'w', encoding='utf-8') as f:
+                f.write(out)
     return new
 
 
