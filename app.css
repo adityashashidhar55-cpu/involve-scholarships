@@ -316,3 +316,7 @@ details > summary { cursor: pointer; }
   width: 5px; height: 5px; border-radius: 50%; background: var(--ink-35);
 }
 .kv-list li:first-child::before { top: 0.65em; }
+
+/* QA: long funder URLs and unbroken words pushed record pages wider than a
+   375px phone. Let them wrap instead. */
+#view a, .snippet, .kv-list li, .value-list li { overflow-wrap: anywhere; }

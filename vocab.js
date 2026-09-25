@@ -145,12 +145,12 @@
     resume: {
       name: 'Involve Resume',
       url: 'https://involveresume.com',
-      line: 'Scholarship panels read a CV differently from employers — Involve Resume builds the academic-format version this asks for.'
+      line: 'Scholarship panels read a CV differently from employers. Involve Resume builds the academic CV that scholarships ask for.'
     },
     consulting: {
       name: 'Involve Consulting',
       url: 'https://involve-consulting.com',
-      line: 'Essays, statements, references and interviews are where funded places are won and lost — Involve Consulting works on these with you.'
+      line: 'Essays, statements, references and interviews decide who gets the money. Involve Consulting works on them with you.'
     }
   };
 

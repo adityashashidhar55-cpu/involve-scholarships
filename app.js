@@ -115,9 +115,9 @@
   function refreshNote(extraStyle) {
     var when = refreshedOn();
     return '<p class="small dim"' + (extraStyle ? ' style="' + extraStyle + '"' : '') + '>' +
-      'Checked and refreshed once a month' +
-      (when ? '. Last refreshed ' + esc(when) : '') +
-      '. Deadlines roll over, closed rounds are marked, and finished cycles drop out.</p>';
+      'We update this list every month' +
+      (when ? '. Last update: ' + esc(when) : '') +
+      '. Deadlines that have passed are marked, and old rounds are removed.</p>';
   }
 
   // The footer lives in index.html, so it is filled in rather than rendered.
@@ -126,8 +126,8 @@
     if (!slot) return;
     var when = refreshedOn();
     slot.textContent = when
-      ? 'Refreshed monthly. Last refreshed ' + when + '.'
-      : 'Refreshed monthly.';
+      ? 'Updated every month. Last update: ' + when + '.'
+      : 'Updated every month.';
   }
 
   function shardMeta(cc) {
@@ -225,6 +225,8 @@
   function titleCase(s) { return String(s || '').replace(/[_-]/g, ' ').replace(/\b\w/g, function (m) { return m.toUpperCase(); }); }
   function uniq(a) { return a.filter(function (v, i) { return a.indexOf(v) === i; }); }
   function cname(c) { return V.countryName(c); }
+  /** For "Study in ...": the 'any' token reads as a place, not a label. */
+  function destName(c) { return c === 'any' ? 'any country' : cname(c); }
 
   /**
    * The engine quotes criterion values verbatim, so its explanations carry raw
@@ -234,11 +236,20 @@
    */
   function humanize(text) {
     if (!text) return '';
-    return String(text).replace(/\b[A-Za-z]{2,12}\b/g, function (tok) {
-      var name = V.COUNTRY_NAME[tok];
-      return name && tok === tok.toUpperCase() && tok.length === 2 ? name
-        : (V.COUNTRY_NAME[tok] && tok === tok.toLowerCase() && tok.length > 2 ? V.COUNTRY_NAME[tok] : tok);
-    });
+    // Only a code that stands alone as a list item is replaced ("citizens of:
+    // IN, PK" or "your nationality: IN."). A code inside prose is left alone,
+    // so "Computer Science / AI" never becomes "Anguilla" and "any other
+    // scholarship" never becomes "Open to any country other scholarship".
+    return String(text).split(/(:\s+|,\s+|\s+and\s+)/).map(function (part) {
+      var m = /^([A-Za-z]{2,12})([.)]?)$/.exec(part);
+      if (!m) return part;
+      var tok = m[1], name = V.COUNTRY_NAME[tok];
+      if (!name) return part;
+      if (tok.length === 2 && tok !== tok.toUpperCase()) return part;
+      if (tok.length > 2 && tok !== tok.toLowerCase() && tok !== 'EU') return part;
+      if (tok === 'any') name = 'any country';
+      return name + m[2];
+    }).join('');
   }
   function levelLabel(k) {
     for (var i = 0; i < V.STUDY_LEVELS.length; i++) if (V.STUDY_LEVELS[i].key === k) return V.STUDY_LEVELS[i].label;
@@ -256,20 +267,60 @@
     TITLE_YEAR_RE.lastIndex = 0;
     return TITLE_YEAR_RE.test(String(title || ''));
   }
+  /**
+   * Dates are compared as YYYY-MM-DD strings against the visitor's own date.
+   * Comparing Date.parse() with the clock made a deadline "passed" at 00:00
+   * UTC on the closing day itself, i.e. from 05:30 in India.
+   */
+  function ymdLocal(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  var TODAY = ymdLocal(NOW);
+  function dayKey(iso) { return iso ? String(iso).slice(0, 10) : null; }
+  function isPast(iso) { var k = dayKey(iso); return !!k && k < TODAY; }
+
+  /** Next date still ahead (main deadline or any round), or null. */
+  function nextDeadline(rec) {
+    var ds = [];
+    if (rec.deadline_date) ds.push(dayKey(rec.deadline_date));
+    (rec.rounds || []).forEach(function (r) { if (r && r.deadline) ds.push(dayKey(r.deadline)); });
+    ds = ds.filter(function (k) { return k && k >= TODAY; }).sort();
+    return ds[0] || null;
+  }
+  function hasAnyDate(rec) {
+    return !!rec.deadline_date || (rec.rounds || []).some(function (r) { return r && r.deadline; });
+  }
+
+  /**
+   * THE definition of "open now", used by every count and badge on the site.
+   * The stored status is only rolled forward once a month (tools/monthly_refresh.py),
+   * so between runs an award whose date has gone by still says "open". Here a
+   * dated award is open only while a published date is still ahead of today.
+   */
+  function isOpenNow(rec) {
+    if (!rec || rec.status === 'discontinued') return false;
+    if (hasAnyDate(rec)) return !!nextDeadline(rec);
+    return rec.status === 'open';
+  }
+
   function isRecurring(rec) {
     var d = rec && (rec.deadline_date || null);
     if (!d) return false;
-    if (Date.parse(d) >= NOW.getTime()) return false;     // still ahead, not lapsed
+    if (nextDeadline(rec)) return false;                  // still ahead, not lapsed
     return !namesACycle(rec.name);
   }
   /** The badge shown wherever a lapsed-but-annual award appears. */
   function recurringBadge() {
-    return '<span class="badge badge-recurring" title="This award runs on an annual cycle. ' +
-      'The date shown is the last one the funder published.">RECURRING \u00b7 not yet open for this year</span>';
+    return '<span class="badge badge-recurring" title="This scholarship runs every year. ' +
+      'The date shown is the last one the funder published.">RUNS EVERY YEAR \u00b7 next round not open yet</span>';
   }
 
   function daysSince(iso) { var t = Date.parse(iso); return isNaN(t) ? null : Math.floor((NOW - t) / 86400000); }
-  function daysUntil(iso) { var t = Date.parse(iso); return isNaN(t) ? null : Math.ceil((t - NOW) / 86400000); }
+  function daysUntil(iso) {
+    var k = dayKey(iso);
+    if (!k || isNaN(Date.parse(k))) return null;
+    return Math.round((Date.parse(k) - Date.parse(TODAY)) / 86400000);
+  }
   function fmtDate(iso) {
     if (!iso) return null;
     var d = new Date(iso);
@@ -282,22 +333,27 @@
   }
 
   function nullState(field, url) {
-    return '<span class="null">NOT PUBLISHED: ' + esc(field) +
-      (url ? ' · <a href="' + esc(url) + '" target="_blank" rel="noreferrer">check official page</a>' : '') + '</span>';
+    return '<span class="null">Not given by the funder' +
+      (url ? ' · <a href="' + esc(url) + '" target="_blank" rel="noreferrer">check their page</a>' : '') + '</span>';
   }
 
   function freshnessBadge(rec) {
     var d = rec.last_verified_at ? daysSince(rec.last_verified_at) : null;
-    if (d === null) return '<span class="badge badge-warn">VERIFICATION DATE NOT RECORDED</span>';
+    if (d === null) return '<span class="badge badge-warn">DATE CHECKED NOT KNOWN</span>';
     var stale = d > STALE_DAYS;
-    return '<span class="badge ' + (stale ? 'badge-warn' : 'badge-ember') + '"><span class="dot"></span>VERIFIED ' +
-      (d === 0 ? 'TODAY' : d + ' DAY' + (d === 1 ? '' : 'S') + ' AGO') + (stale ? ' · STALE' : '') + '</span>';
+    return '<span class="badge ' + (stale ? 'badge-warn' : 'badge-ember') + '"><span class="dot"></span>CHECKED ' +
+      (d === 0 ? 'TODAY' : d + ' DAY' + (d === 1 ? '' : 'S') + ' AGO') + (stale ? ' · MAY BE OUT OF DATE' : '') + '</span>';
   }
   function statusBadge(rec) {
-    if (rec.status === 'cycle_closed') return '<span class="badge badge-warn">CYCLE CLOSED</span>';
-    if (rec.status === 'discontinued') return '<span class="badge badge-warn">DISCONTINUED</span>';
-    var d = rec.deadline_date ? daysUntil(rec.deadline_date) : null;
-    if (d !== null && d >= 0 && d <= 30) return '<span class="badge badge-steel">CLOSES IN ' + d + ' DAY' + (d === 1 ? '' : 'S') + '</span>';
+    if (rec.status === 'discontinued') return '<span class="badge badge-warn">NO LONGER RUNS</span>';
+    if (!isOpenNow(rec)) {
+      if (isRecurring(rec)) return recurringBadge();
+      if (hasAnyDate(rec)) return '<span class="badge badge-warn">DEADLINE PASSED</span>';
+      return '<span class="badge badge-warn">CLOSED FOR NOW</span>';
+    }
+    var next = nextDeadline(rec), d = next ? daysUntil(next) : null;
+    if (d === 0) return '<span class="badge badge-steel">CLOSES TODAY</span>';
+    if (d !== null && d > 0 && d <= 30) return '<span class="badge badge-steel">CLOSES IN ' + d + ' DAY' + (d === 1 ? '' : 'S') + '</span>';
     return '<span class="badge badge-ember">OPEN</span>';
   }
 
@@ -406,14 +462,14 @@
   }
   function errorPage(e) {
     return '<div class="wrap section"><p class="eyebrow">SORRY</p><h1>This page didn\u2019t load</h1>' +
-      '<p class="muted" style="margin-top:14px;max-width:60ch">Your saved details may be from an older version of the site. This is a fault in the page. The most common cause is saved intake data from an older version.</p>' +
-      '<div class="row" style="margin-top:22px"><a class="btn btn-primary" href="#/">Go home</a><button class="btn" id="clearAll">Clear saved data</button></div>' +
+      '<p class="muted" style="margin-top:14px;max-width:60ch">Something went wrong on our side. It often happens when details saved by an older version of this site get in the way. Clearing them usually fixes it.</p>' +
+      '<div class="row" style="margin-top:22px"><a class="btn btn-primary" href="#/">Go home</a><button class="btn" id="clearAll">Clear saved details</button></div>' +
       '</div>';
   }
   function notFoundPage(path) {
-    return '<div class="wrap section"><p class="eyebrow">404</p><h1>Nothing at this address</h1>' +
+    return '<div class="wrap section"><p class="eyebrow">404</p><h1>Page not found</h1>' +
       '<p class="muted" style="margin-top:14px"><code class="mono">' + esc(path) + '</code> is not a page on this site.</p>' +
-      '<div class="row" style="margin-top:22px"><a class="btn btn-primary" href="#/explore">Browse all funding</a></div></div>';
+      '<div class="row" style="margin-top:22px"><a class="btn btn-primary" href="#/explore">See all scholarships</a></div></div>';
   }
 
   // ------------------------------------------------------------------ intake
@@ -624,14 +680,14 @@
     return '' +
     '<div class="band-cream"><section class="wrap section">' +
       '<p class="eyebrow">INVOLVE SCHOLARSHIPS</p>' +
-      '<h1 style="margin-top:10px;max-width:16ch">Find the funding you are actually eligible for.</h1>' +
-      '<p class="muted" style="margin-top:18px;max-width:62ch">Government, foundation and multilateral scholarships. These are the awards you apply for directly, on your own merits. Every one is read from the funder\u2019s official page, quotes their exact wording, and shows the date we last checked it. Where a funder has not published something, we say so instead of guessing.</p>' +
-      '<div class="row" style="margin-top:26px"><a class="btn btn-primary" href="#/intake">Match my profile</a>' +
-      '<a class="btn" href="#/explore">Browse all funding</a><a class="btn" href="#/directory">Funding directory</a></div>' +
+      '<h1 style="margin-top:10px;max-width:16ch">Find scholarships you can actually get.</h1>' +
+      '<p class="muted" style="margin-top:18px;max-width:62ch">Scholarships from governments, foundations and international groups. You apply for these yourself. We read each one on the funder\u2019s own website, show you their exact words, and tell you when we last checked. If the funder doesn\u2019t say something, we tell you. We never guess.</p>' +
+      '<div class="row" style="margin-top:26px"><a class="btn btn-primary" href="#/intake">Check what I qualify for</a>' +
+      '<a class="btn" href="#/explore">See all scholarships</a><a class="btn" href="#/directory">Scholarship directory</a></div>' +
       '<div class="grid grid-3" style="margin-top:44px">' +
-        statTile(GENERAL.length, 'government & private awards') +
-        statTile(GENERAL.filter(function (r) { return r.status === 'open'; }).length, 'currently open') +
-        statTile(COLLEGE.length || '0', 'university-run, listed separately') +
+        statTile(GENERAL.length, 'scholarships from governments and foundations') +
+        statTile(GENERAL.filter(isOpenNow).length, 'of these are open now') +
+        statTile(universitiesLoaded ? COLLEGE.length : '\u2026', 'university scholarships, shown on their own page') +
       '</div>' +
       refreshNote('margin-top:18px;max-width:62ch') +
     '</section>';
@@ -650,98 +706,98 @@
       '<p class="small"><a href="#/">Home</a> <span class="dim">/</span> Your profile</p>' +
     '</section>' +
     '<section class="wrap section" id="intake" style="border-top:1px solid var(--hairline)">' +
-      '<p class="eyebrow">INTAKE</p>' +
-      '<h2 style="margin-top:10px">The more you tell us, the fewer false hopes</h2>' +
-      '<p class="muted" style="margin-top:12px;max-width:62ch">Only nationality and study level are required. Every other field turns an <em>unknown</em> into a real yes or no. Leave one blank and the engine reports unknown for any rule that depends on it, rather than guessing.</p>' +
-      '<form id="intake-form" style="margin-top:22px">' +
+      '<p class="eyebrow">YOUR DETAILS</p>' +
+      '<h2 style="margin-top:10px">Tell us about you</h2>' +
+      '<p class="muted" style="margin-top:12px;max-width:62ch">Only two answers are needed: your nationality and the degree you want. Every other answer helps us give you a clear yes or no. If you skip one, we tell you what we could not check. We never guess.</p>' +
+      '<form id="intake-form" novalidate style="margin-top:22px">' +
 
-      fieldset('1 · Who you are', 'Nationality decides more awards than anything else you can tell us. Most funders restrict by it.',
+      fieldset('1 · About you', 'Your nationality matters most. Most scholarships are only for some countries.',
         '<div class="grid grid-2">' +
           '<div><label class="field label" for="f-nat">Nationality *</label>' +
             '<select id="f-nat"><option value="">Select a country…</option>' +
             nationalityOptions().map(function (c) { return opt(c, cname(c), p.nationality); }).join('') + '</select>' +
-            '<p class="err" id="e-nat" hidden>Pick your nationality. It drives the whole match.</p></div>' +
-          '<div><label class="field label" for="f-res">Country of residence</label>' +
+            '<p class="err" id="e-nat" hidden>Please pick your nationality.</p></div>' +
+          '<div><label class="field label" for="f-res">Country you live in</label>' +
             '<select id="f-res"><option value="">Same as nationality</option>' +
             nationalityOptions().map(function (c) { return opt(c, cname(c), p.residence); }).join('') + '</select></div>' +
           '<div><label class="field label" for="f-age">Age</label>' +
             '<input id="f-age" type="number" min="14" max="99" step="1" value="' + esc(p.age == null ? '' : p.age) + '" placeholder="e.g. 24">' +
-            '<p class="err" id="e-age" hidden>Age must be between 14 and 99.</p></div>' +
-          '<div><label class="field label" for="f-gender">Gender <span class="dim">(3 awards are women-only)</span></label>' +
-            sel('f-gender', [{ key: 'female', label: 'Woman' }, { key: 'male', label: 'Man' }, { key: 'other', label: 'Another gender identity' }], p.gender, 'Prefer not to say') + '</div>' +
+            '<p class="err" id="e-age" hidden>Please enter an age from 14 to 99.</p></div>' +
+          '<div><label class="field label" for="f-gender">Gender <span class="dim">(some scholarships are only for women)</span></label>' +
+            sel('f-gender', [{ key: 'female', label: 'Woman' }, { key: 'male', label: 'Man' }, { key: 'other', label: 'Another gender' }], p.gender, 'Prefer not to say') + '</div>' +
         '</div>') +
 
-      fieldset('2 · What you want to study', 'Pick a course area, and name universities if you already have a shortlist. University-specific awards are listed separately so they never crowd out national and multilateral funding.',
+      fieldset('2 · What you want to study', 'Pick a subject area. If you already know your universities, add them too. University scholarships are shown in their own list.',
         '<div class="grid grid-2">' +
-          '<div><label class="field label" for="f-level">Study level *</label>' +
+          '<div><label class="field label" for="f-level">Degree you want *</label>' +
             sel('f-level', V.STUDY_LEVELS, p.study_level, 'Select…') +
-            '<p class="err" id="e-level" hidden>Pick a study level to continue.</p></div>' +
-          '<div><label class="field label" for="f-term">Intake term</label>' +
+            '<p class="err" id="e-level" hidden>Please pick the degree you want.</p></div>' +
+          '<div><label class="field label" for="f-term">When do you want to start?</label>' +
             sel('f-term', V.INTAKE_TERMS, p.intake_term, 'Not sure yet') + '</div>' +
         '</div>' +
-        '<div id="courseArea" style="margin-top:18px"><p class="label">Course area <span class="dim">(type to search)</span></p>' + picker('course_groups', V.COURSE_GROUPS, p.course_groups, 'Search course areas…') + '</div>' +
-        '<div id="courseAreaMba" style="margin-top:18px" hidden><p class="label">Course area</p>' +
-          '<p class="small muted" style="margin-top:6px">An MBA is a management degree, so we search business and management funding automatically. Nothing to pick.</p></div>' +
-        '<div style="margin-top:18px"><label class="field label" for="f-course">Specific course or subject <span class="dim">(free text, matched against the funder’s own wording)</span></label>' +
+        '<div id="courseArea" style="margin-top:18px"><p class="label">Subject area <span class="dim">(type to search)</span></p>' + picker('course_groups', V.COURSE_GROUPS, p.course_groups, 'Search subjects…') + '</div>' +
+        '<div id="courseAreaMba" style="margin-top:18px" hidden><p class="label">Subject area</p>' +
+          '<p class="small muted" style="margin-top:6px">An MBA is a business degree, so we look for business scholarships for you. Nothing to pick here.</p></div>' +
+        '<div style="margin-top:18px"><label class="field label" for="f-course">Your exact course <span class="dim">(optional, we look for these words in each scholarship)</span></label>' +
           '<input id="f-course" type="text" placeholder="e.g. renewable energy engineering" value="' + esc((p.fields || []).join(', ')) + '"></div>' +
-        '<div style="margin-top:18px"><p class="label">Target universities <span class="dim">(' + SCHOOL_NAMES.length + ' with their own awards, type to search)</span></p>' +
+        '<div style="margin-top:18px"><p class="label">Universities you want to apply to <span class="dim">(type to search)</span></p>' +
           picker('target_schools', SCHOOL_NAMES.map(function (n) { return { key: n, label: n }; }), p.target_schools, 'Search universities…') + '</div>' +
-        '<div style="margin-top:18px"><p class="label">Destination countries <span class="dim">(blank = open to anywhere)</span></p>' +
+        '<div style="margin-top:18px"><p class="label">Countries you want to study in <span class="dim">(leave empty for any country)</span></p>' +
           picker('destinations', destinationOptions().map(function (c) { return { key: c, label: cname(c) }; }), p.destinations, 'Search countries…') + '</div>') +
 
-      fieldset('3 · When you plan to apply', 'Cycles matter more than anything else on this site. Picking a year hides rounds that have already closed rather than showing you a deadline you cannot meet.',
-        '<div class="grid grid-2"><div><label class="field label" for="f-year">Application year</label>' +
+      fieldset('3 · When you will apply', 'Pick a year to only see scholarships with a deadline in that year. Scholarships with no date always show.',
+        '<div class="grid grid-2"><div><label class="field label" for="f-year">Year you will apply</label>' +
           '<select id="f-year"><option value="">Any year</option>' +
-          years.map(function (y) { return opt(y, y + ' cycle', p.application_year ? String(p.application_year) : ''); }).join('') +
+          years.map(function (y) { return opt(y, y, p.application_year ? String(p.application_year) : ''); }).join('') +
           '</select></div></div>') +
 
-      fieldset('4 · Academic record',
-        'Many awards set a minimum degree class or grade average. Filling these in turns a maybe into a yes or no.',
+      fieldset('4 · Your grades',
+        'Many scholarships ask for a minimum grade. Add yours so we can check. We only compare grades when the funder uses the same scale as you (for example, out of 10).',
         '<div class="grid grid-2">' +
-          '<div><label class="field label" for="f-degree">Highest degree completed</label>' +
+          '<div><label class="field label" for="f-degree">Highest degree you have finished</label>' +
             sel('f-degree', [{ key: 'secondary', label: 'Secondary school' }, { key: 'bachelor', label: 'Bachelor’s' }, { key: 'masters', label: 'Master’s' }, { key: 'phd', label: 'PhD' }], p.highest_degree, 'Select…') + '</div>' +
-          '<div><label class="field label" for="f-class">Degree classification</label>' +
+          '<div><label class="field label" for="f-class">Degree result</label>' +
             sel('f-class', V.DEGREE_CLASSES, p.prior_degree_class, 'Select…') + '</div>' +
-          '<div><label class="field label" for="f-gpa">GPA</label><input id="f-gpa" type="number" step="0.01" min="0" placeholder="e.g. 8.2" value="' + esc(p.gpa ? p.gpa.value : '') + '"></div>' +
-          '<div><label class="field label" for="f-gpascale">GPA scale</label><input id="f-gpascale" type="number" step="0.1" min="1" placeholder="e.g. 10" value="' + esc(p.gpa ? p.gpa.scale : '') + '"><p class="err" id="e-gpa" hidden>GPA cannot exceed its scale.</p></div>' +
-          '<div><label class="field label" for="f-priorfield">Field of your previous degree</label><input id="f-priorfield" type="text" placeholder="e.g. electrical engineering" value="' + esc(p.prior_degree_field || '') + '"></div>' +
-          '<div><label class="field label" for="f-enrolled">Currently enrolled full-time?</label>' + tri('enrolled_full_time', p.enrolled_full_time) + '</div>' +
+          '<div><label class="field label" for="f-gpa">Your grade (CGPA, GPA or %)</label><input id="f-gpa" type="number" step="0.01" min="0" placeholder="e.g. 8.2" value="' + esc(p.gpa ? p.gpa.value : '') + '"></div>' +
+          '<div><label class="field label" for="f-gpascale">Out of</label><input id="f-gpascale" type="number" step="0.01" min="1" placeholder="e.g. 10, 4 or 100" value="' + esc(p.gpa ? p.gpa.scale : '') + '"><p class="err" id="e-gpa" hidden>Your grade can\u2019t be higher than the \u201cout of\u201d number.</p><p class="err" id="e-gpascale" hidden>Please add the \u201cout of\u201d number too, for example 10.</p></div>' +
+          '<div><label class="field label" for="f-priorfield">Subject of your last degree</label><input id="f-priorfield" type="text" placeholder="e.g. electrical engineering" value="' + esc(p.prior_degree_field || '') + '"></div>' +
+          '<div><label class="field label" for="f-enrolled">Will you study full-time?</label>' + tri('enrolled_full_time', p.enrolled_full_time) + '</div>' +
         '</div>' +
-        '<div style="margin-top:18px"><p class="label">Languages you can certify</p>' +
+        '<div style="margin-top:18px"><p class="label">Languages you have a test or certificate for</p>' +
           picker('certified_languages', V.LANGUAGES.map(function (l) { return { key: l, label: l }; }), p.certified_languages, 'Search languages…') + '</div>') +
 
-      fieldset('5 · Tests and work', null,
+      fieldset('5 · Tests and work', 'Leave a test empty if you haven\u2019t taken it.',
         '<div class="grid grid-2">' +
-          '<div><label class="field label" for="f-ielts">IELTS</label><input id="f-ielts" type="number" step="0.5" min="0" max="9" placeholder="max 9" value="' + esc(p.test_scores && p.test_scores.ielts != null ? p.test_scores.ielts : '') + '"><p class="err" id="e-ielts" hidden>IELTS is scored 0 to 9.</p></div>' +
-          '<div><label class="field label" for="f-toefl">TOEFL iBT</label><input id="f-toefl" type="number" step="1" min="0" max="120" placeholder="max 120" value="' + esc(p.test_scores && p.test_scores.toefl != null ? p.test_scores.toefl : '') + '"><p class="err" id="e-toefl" hidden>TOEFL iBT is scored 0 to 120.</p></div>' +
-          '<div><label class="field label" for="f-gre">GRE total</label><input id="f-gre" type="number" step="1" min="260" max="340" placeholder="260 to 340" value="' + esc(p.test_scores && p.test_scores.gre != null ? p.test_scores.gre : '') + '"><p class="err" id="e-gre" hidden>GRE total is 260 to 340.</p></div>' +
-          '<div><label class="field label" for="f-gmat">GMAT total</label><input id="f-gmat" type="number" step="1" min="205" max="805" placeholder="205 to 805" value="' + esc(p.test_scores && p.test_scores.gmat != null ? p.test_scores.gmat : '') + '"><p class="err" id="e-gmat" hidden>GMAT total is 205 to 805.</p></div>' +
-          '<div><label class="field label" for="f-work">Years of full-time work experience</label><input id="f-work" type="number" step="1" min="0" max="60" value="' + esc(p.work_experience_years == null ? '' : p.work_experience_years) + '"></div>' +
-          '<div><label class="field label" for="f-employ">Current situation</label>' + sel('f-employ', V.EMPLOYMENT, p.employment_status, 'Select…') + '</div>' +
+          '<div><label class="field label" for="f-ielts">IELTS</label><input id="f-ielts" type="number" step="0.5" min="0" max="9" placeholder="max 9" value="' + esc(p.test_scores && p.test_scores.ielts != null ? p.test_scores.ielts : '') + '"><p class="err" id="e-ielts" hidden>IELTS scores go from 0 to 9.</p></div>' +
+          '<div><label class="field label" for="f-toefl">TOEFL iBT</label><input id="f-toefl" type="number" step="1" min="0" max="120" placeholder="max 120" value="' + esc(p.test_scores && p.test_scores.toefl != null ? p.test_scores.toefl : '') + '"><p class="err" id="e-toefl" hidden>TOEFL iBT scores go from 0 to 120.</p></div>' +
+          '<div><label class="field label" for="f-gre">GRE total</label><input id="f-gre" type="number" step="1" min="260" max="340" placeholder="260 to 340" value="' + esc(p.test_scores && p.test_scores.gre != null ? p.test_scores.gre : '') + '"><p class="err" id="e-gre" hidden>GRE scores go from 260 to 340.</p></div>' +
+          '<div><label class="field label" for="f-gmat">GMAT total</label><input id="f-gmat" type="number" step="1" min="205" max="805" placeholder="205 to 805" value="' + esc(p.test_scores && p.test_scores.gmat != null ? p.test_scores.gmat : '') + '"><p class="err" id="e-gmat" hidden>GMAT scores go from 205 to 805.</p></div>' +
+          '<div><label class="field label" for="f-work">Years of full-time work</label><input id="f-work" type="number" step="0.5" min="0" max="60" value="' + esc(p.work_experience_years == null ? '' : p.work_experience_years) + '"><p class="err" id="e-work" hidden>Please enter a number from 0 to 60.</p></div>' +
+          '<div><label class="field label" for="f-employ">What do you do now?</label>' + sel('f-employ', V.EMPLOYMENT, p.employment_status, 'Select…') + '</div>' +
         '</div>') +
 
       fieldset('6 · Money',
-        'Some funders publish an income cap as a figure; most simply ask you to demonstrate financial need. We compare the figures and flag the rest as need-based rather than guess on your behalf.',
+        'Some scholarships have an income limit. We compare it with yours when it is in the same currency. Most just ask you to show you need the money. For those, we show the funder\u2019s words and let you decide.',
         '<div class="grid grid-2">' +
-          '<div><label class="field label" for="f-income">Annual household income</label><input id="f-income" type="number" step="1000" min="0" placeholder="leave blank if unsure" value="' + esc(p.household_income_amount == null ? '' : p.household_income_amount) + '"></div>' +
+          '<div><label class="field label" for="f-income">Yearly family income</label><input id="f-income" type="number" step="1" min="0" placeholder="leave empty if unsure" value="' + esc(p.household_income_amount == null ? '' : p.household_income_amount) + '"><p class="err" id="e-income" hidden>Please enter a number of 0 or more.</p><p class="err" id="e-cur" hidden>Please pick the currency too.</p></div>' +
           '<div><label class="field label" for="f-cur">Currency</label>' +
             '<select id="f-cur"><option value="">Select…</option>' + V.CURRENCIES.map(function (c) { return opt(c, c, p.household_income_currency); }).join('') + '</select></div>' +
         '</div>' +
-        '<div style="margin-top:16px"><p class="label">Will you apply as a need-based candidate?</p>' + tri('declares_financial_need', p.declares_financial_need, 'Yes, I will document need', 'No') + '</div>') +
+        '<div style="margin-top:16px"><p class="label">Do you need money to be able to study?</p>' + tri('declares_financial_need', p.declares_financial_need, 'Yes, and I can show proof', 'No') + '</div>') +
 
-      fieldset('7 · Circumstances and constraints',
-        'Funders price these in explicitly. Anything not on the list goes in the free-text box. You still see it, and it goes into a consultant handoff, but the engine does not evaluate it.',
-        '<p class="label">Status</p>' + chips('special_status', V.STATUSES, p.special_status) +
-        '<div style="margin-top:18px"><label class="field label" for="f-other">Any other status or circumstance</label>' +
+      fieldset('7 · Your situation',
+        'Some scholarships are for people in certain situations. Tick any that apply. You can write anything else in the box. We don\u2019t use the box for matching. We only send it to our team if you ask for a review.',
+        '<p class="label">Tick any that apply</p>' + chips('special_status', V.STATUSES, p.special_status) +
+        '<div style="margin-top:18px"><label class="field label" for="f-other">Anything else about your situation?</label>' +
           '<textarea id="f-other" rows="2" placeholder="e.g. I support a dependent parent; my degree was interrupted by conflict">' + esc(p.other_status_note || '') + '</textarea></div>' +
         '<div class="grid grid-2" style="margin-top:18px">' +
-          '<div><p class="label">Do you already hold university admission?</p>' + tri('has_admission', p.has_admission, 'Yes', 'Not yet') + '</div>' +
-          '<div><p class="label">Do you hold another major award?</p>' + tri('holds_other_award', p.holds_other_award, 'Yes', 'No') + '</div>' +
-          '<div><p class="label">Willing to return home after graduating?</p>' + tri('willing_to_return_home', p.willing_to_return_home, 'Yes', 'No') + '</div>' +
+          '<div><p class="label">Do you have a university offer yet?</p>' + tri('has_admission', p.has_admission, 'Yes', 'Not yet') + '</div>' +
+          '<div><p class="label">Do you already have another big scholarship?</p>' + tri('holds_other_award', p.holds_other_award, 'Yes', 'No') + '</div>' +
+          '<div><p class="label">Will you go back to your home country after your studies?</p>' + tri('willing_to_return_home', p.willing_to_return_home, 'Yes', 'No') + '</div>' +
         '</div>') +
 
       '<div class="row" style="margin-top:28px"><button class="btn btn-primary" type="submit">Show my scholarships</button>' +
-      '<span class="small dim">Nothing leaves your browser.</span></div>' +
+      '<span class="small dim">Your answers stay on this device.</span></div>' +
       '</form>' +
     '</section>';
   }
@@ -765,15 +821,15 @@
     if (wantsLetter) needs.push('a written statement');
     if (wantsCv) needs.push('a CV');
     return '<div class="card card-help" style="margin-top:24px">' +
-      '<p class="label">THIS ONE ASKS FOR ' + esc(needs.join(' AND ').toUpperCase()) + '</p>' +
-      '<p class="small muted" style="margin-top:8px;max-width:66ch">The funder decides on what you write, not just on your grades. ' +
-      'If you would like help with that part:</p>' +
+      '<p class="label">THIS SCHOLARSHIP ASKS FOR ' + esc(needs.join(' AND ').toUpperCase()) + '</p>' +
+      '<p class="small muted" style="margin-top:8px;max-width:66ch">The funder decides based on what you write, not only your grades. ' +
+      'Want help with this part?</p>' +
       '<div class="row" style="margin-top:14px">' +
         (wantsLetter ? '<a class="btn btn-sm" href="https://involve-consulting.com/contact-us/" target="_blank" rel="noopener">Help with the letter</a>' : '') +
         (wantsCv ? '<a class="btn btn-sm" href="https://involveresume.com" target="_blank" rel="noopener">Help with the CV</a>' : '') +
         '<a class="btn btn-sm btn-primary" href="https://involve-consulting.com/contact-us/" target="_blank" rel="noopener">Full application guidance</a>' +
       '</div>' +
-      '<p class="small dim" style="margin-top:12px">Involve Consulting can take you through the whole application, not just the documents. The scholarship itself is free to browse and always will be.</p>' +
+      '<p class="small dim" style="margin-top:12px">Involve Consulting can help with the whole application, not just the documents. This website is free and always will be.</p>' +
       '</div>';
   }
 
@@ -784,11 +840,13 @@
 
   // ----------------------------------------------------------------- results
   var BUCKET_META = {
-    eligible_now: { cls: 'b1', title: 'Eligible now', blurb: 'Every hard rule the funder published is satisfied by what you told us.' },
-    eligible_if_you_act: { cls: 'b2', title: 'Eligible if you act', blurb: 'One or more hard rules are not yet met. Each is something you can still do or supply.' },
-    competitive_stretch: { cls: 'b3', title: 'Competitive stretch', blurb: 'You clear the hard rules but sit below the typical bar. Worth applying with a strong case.' },
-    not_eligible: { cls: 'b4', title: 'Not eligible', blurb: 'A published rule rules you out. The exact rule is quoted so you can check it yourself.' }
+    eligible_now: { cls: 'b1', title: 'You qualify', blurb: 'Based on your answers, you meet every rule the funder published.' },
+    eligible_if_you_act: { cls: 'b2', title: 'You could qualify', blurb: 'Nothing rules you out so far. There are one or more things to do or check first. Each card tells you what.' },
+    competitive_stretch: { cls: 'b3', title: 'Possible, but hard', blurb: 'You meet the must-have rules, but not what the funder prefers. You can still apply.' },
+    rules_not_checked: { cls: 'b3', title: 'Not checked yet', blurb: 'We haven\u2019t read the rules of these yet. We only checked your nationality, degree and country. Read the funder\u2019s page first.' },
+    not_eligible: { cls: 'b4', title: 'You don\u2019t qualify', blurb: 'A rule on the funder\u2019s page rules you out. We show the rule so you can check it.' }
   };
+  var BUCKET_ORDER = ['eligible_now', 'eligible_if_you_act', 'competitive_stretch', 'rules_not_checked', 'not_eligible'];
 
   function courseMatches(rec, groups, freeText) {
     if ((!groups || !groups.length) && !freeText) return true;
@@ -828,32 +886,33 @@
   function emptyResultsFallback(p) {
     var dests = (p.destinations || []).filter(function (d) { return d && d !== 'any'; });
     var lvl = p.study_level ? levelLabel(p.study_level) : 'your level';
-    var links = dests.length ? dests : ['GB', 'DE', 'FR', 'NL', 'ES'];
+    var links = (dests.length ? dests : ['GB', 'DE', 'FR', 'NL', 'ES'])
+      .filter(function (cc) { return !LISTING_INDEX || shardMeta(cc); });   // never link to a directory page that 404s
     return '<div class="card card-help" style="margin-top:26px">' +
-      '<p class="label">NOTHING IN THE VERIFIED REGISTER FOR THIS COMBINATION YET</p>' +
+      '<p class="label">NO CHECKED SCHOLARSHIP FITS YOU YET</p>' +
       '<p class="small muted" style="margin-top:8px;max-width:66ch">' +
-        'No award we have read rule by rule fits ' + esc(lvl) +
-        (dests.length ? ' in ' + esc(dests.map(cname).join(', ')) : '') +
-        ' for your nationality. That is a gap in what we have verified, not proof that no funding exists. ' +
-        'The directory below covers the same destinations and is much larger, though its eligibility is unchecked.</p>' +
+        'None of the scholarships we have checked fit your answers (' + esc(lvl) +
+        (dests.length ? ', ' + esc(dests.map(cname).join(', ')) : '') +
+        ', your nationality). This does not mean there is no money for you. It means we haven\u2019t checked one that fits yet. ' +
+        'Our directory has many more scholarships for these countries. We haven\u2019t checked their rules yet.</p>' +
       '<div class="row" style="margin-top:14px">' +
         links.slice(0, 6).map(function (cc) {
           return '<a class="btn btn-sm btn-primary" href="#/directory/' + esc(cc) + '">' +
             esc(cname(cc)) + ' directory</a>';
         }).join('') +
-        '<a class="btn btn-sm" href="#/intake">Widen my profile</a>' +
+        '<a class="btn btn-sm" href="#/intake">Change my answers</a>' +
         '<a class="btn btn-sm" href="https://involve-consulting.com/contact-us/" target="_blank" rel="noopener">Ask a consultant</a>' +
       '</div>' +
-      '<p class="small dim" style="margin-top:12px">Two fields close the most doors: a single destination, and a course area narrower than the funder’s own wording. Widening either usually brings awards back.</p>' +
+      '<p class="small dim" style="margin-top:12px">Two answers hide the most results: picking only one country, and a very narrow subject. Try widening them.</p>' +
       '</div>';
   }
 
   function resultsPage() {
     var p = loadProfile();
     if (!p || !p.nationality || !p.study_level) {
-      return '<div class="wrap section"><p class="eyebrow">NO PROFILE YET</p><h1>Tell us who you are first</h1>' +
-        '<p class="muted" style="margin-top:14px;max-width:58ch">The four buckets are computed against your profile. Nationality and study level are the minimum.</p>' +
-        '<div class="row" style="margin-top:22px"><a class="btn btn-primary" href="#/intake">Start the intake</a></div></div>';
+      return '<div class="wrap section"><p class="eyebrow">NO DETAILS YET</p><h1>Tell us about you first</h1>' +
+        '<p class="muted" style="margin-top:14px;max-width:58ch">We need at least your nationality and the degree you want. Then we can show which scholarships fit you.</p>' +
+        '<div class="row" style="margin-top:22px"><a class="btn btn-primary" href="#/intake">Start</a></div></div>';
     }
 
     var generalPool = applyFilters(GENERAL, p);
@@ -864,10 +923,10 @@
 
     var out = CORE.matchScholarships(p, generalPool, NOW);
     var collegeOut = CORE.matchScholarships(p, collegePool, NOW);
-    var order = ['eligible_now', 'eligible_if_you_act', 'competitive_stretch', 'not_eligible'];
+    var order = BUCKET_ORDER;
 
     var filterNote = [];
-    if (p.application_year) filterNote.push('cycle ' + p.application_year);
+    if (p.application_year) filterNote.push('deadline in ' + p.application_year);
     if ((p.course_groups || []).length) filterNote.push(p.course_groups.map(function (k) {
       var g = V.COURSE_GROUPS.filter(function (x) { return x.key === k; })[0]; return g ? g.label : k;
     }).join(', '));
@@ -878,24 +937,25 @@
       /manage|business|mba|mim|finance|marketing/i.test((p.fields || []).join(' '));
 
     var html = '<div class="wrap section">' +
-      '<p class="eyebrow">YOUR MATCH</p>' +
-      '<h1 style="margin-top:10px">Four buckets, never one list</h1>' +
-      '<div class="row" style="margin-top:16px">' + profileChips(p) + '<a class="btn btn-sm" href="#/intake">Edit profile</a></div>' +
-      '<p class="small dim" style="margin-top:12px">' + generalPool.length + ' of ' + GENERAL.length + ' open-pool records assessed' +
-        (filterNote.length ? ' after filtering by ' + esc(filterNote.join(' · ')) : '') +
-        '. University-specific awards are assessed separately below.</p>' +
+      '<p class="eyebrow">YOUR RESULTS</p>' +
+      '<h1 style="margin-top:10px">Scholarships for you</h1>' +
+      '<div class="row" style="margin-top:16px">' + profileChips(p) + '<a class="btn btn-sm" href="#/intake">Change my answers</a></div>' +
+      '<p class="small dim" id="resultsNote" style="margin-top:12px">We checked ' + generalPool.length + ' of our ' + GENERAL.length +
+        ' government and foundation scholarships against your answers' +
+        (filterNote.length ? ' (only ' + esc(filterNote.join(' · ')) + ')' : '') +
+        '. University scholarships are in their own list at the bottom.</p>' +
       (wantsMgmt
-        ? '<div class="card card-help" style="margin-top:20px"><p class="label">MORE MANAGEMENT FUNDING IN THE DIRECTORY</p>' +
-          '<p class="small muted" style="margin-top:8px;max-width:66ch">The buckets above only cover awards we have read line by line. ' +
-          'The directory holds a further 1,527 MBA, MiM and management awards from business schools, governments and trusts, ' +
-          'including 1,166 in Europe. Their eligibility is not checked yet, so treat them as leads.</p>' +
+        ? '<div class="card card-help" style="margin-top:20px"><p class="label">MORE MBA AND BUSINESS SCHOLARSHIPS</p>' +
+          '<p class="small muted" style="margin-top:8px;max-width:66ch">Your results below only include scholarships we have checked rule by rule. ' +
+          'Our directory has many more MBA and business scholarships from business schools, governments and trusts. ' +
+          'We haven\u2019t checked their rules yet, so treat them as leads.</p>' +
           '<div class="row" style="margin-top:12px">' +
-          '<a class="btn btn-sm btn-primary" href="#/directory/GB">United Kingdom (611)</a>' +
-          '<a class="btn btn-sm" href="#/directory/FR">France (103)</a>' +
-          '<a class="btn btn-sm" href="#/directory/DE">Germany (127)</a>' +
-          '<a class="btn btn-sm" href="#/directory/ES">Spain (100)</a>' +
-          '<a class="btn btn-sm" href="#/directory">All destinations</a></div>' +
-          '<p class="small dim" style="margin-top:10px">Use the "MBA and management" button on any destination to filter to them.</p></div>'
+          '<a class="btn btn-sm btn-primary" href="#/directory/GB">United Kingdom</a>' +
+          '<a class="btn btn-sm" href="#/directory/FR">France</a>' +
+          '<a class="btn btn-sm" href="#/directory/DE">Germany</a>' +
+          '<a class="btn btn-sm" href="#/directory/ES">Spain</a>' +
+          '<a class="btn btn-sm" href="#/directory">All countries</a></div>' +
+          '<p class="small dim" style="margin-top:10px">On each country page, tap \u201cMBA and business\u201d to see only these.</p></div>'
         : '') +
       '<div class="grid grid-3" style="margin-top:24px">' +
         order.slice(0, 3).map(function (k) {
@@ -909,13 +969,17 @@
       out.buckets.competitive_stretch.length;
     if (!liveCount) html += emptyResultsFallback(p);
 
+    // Every scholarship we checked lands in exactly one group, and every group
+    // is shown, so the group counts always add up to the number in the note.
+    // ("Not checked yet" used to be computed and then silently dropped.)
     order.forEach(function (k) {
-      var list = out.buckets[k], meta = BUCKET_META[k];
-      html += '<section class="bucket"><div class="bucket-head ' + meta.cls + '"><div class="spread">' +
+      var list = out.buckets[k] || [], meta = BUCKET_META[k];
+      html += '<section class="bucket" data-bucket="' + k + '"><div class="bucket-head ' + meta.cls + '"><div class="spread">' +
         '<h2>' + esc(meta.title) + '</h2><p class="data">' + list.length + '</p></div>' +
         '<p class="muted small" style="margin-top:6px;max-width:64ch">' + esc(meta.blurb) + '</p></div>';
-      if (!list.length) html += '<p class="null">Nothing in this bucket for your profile.</p>';
-      else if (k === 'not_eligible') html += '<details><summary class="label">Show all ' + list.length + ' with the rule that ruled you out</summary><div style="margin-top:14px">' + list.slice(0, 60).map(resultCard).join('') + '</div></details>';
+      if (!list.length) html += '<p class="null">None for you here.</p>';
+      else if (k === 'not_eligible') html += '<details><summary class="label">Show all ' + list.length + ' and the rule that rules you out</summary><div style="margin-top:14px">' + list.map(resultCard).join('') + '</div></details>';
+      else if (k === 'rules_not_checked') html += '<details><summary class="label">Show all ' + list.length + '</summary><div style="margin-top:14px">' + list.map(resultCard).join('') + '</div></details>';
       else html += list.map(resultCard).join('');
       html += '</section>';
     });
@@ -923,13 +987,15 @@
     // --- university-specific, kept separate on purpose ---
     var cTotal = collegeOut.buckets.eligible_now.length + collegeOut.buckets.eligible_if_you_act.length + collegeOut.buckets.competitive_stretch.length;
     html += '<section class="bucket"><div class="bucket-head b2"><div class="spread">' +
-      '<h2>University-specific awards</h2><p class="data">' + cTotal + '</p></div>' +
-      '<p class="muted small" style="margin-top:6px;max-width:66ch">Held by a named school and usually decided alongside your admission, not applied for separately. ' +
-      ((p.target_schools || []).length ? 'Filtered to the ' + p.target_schools.length + ' school' + (p.target_schools.length === 1 ? '' : 's') + ' you named.' : 'Name your target schools in the intake to narrow this.') +
+      '<h2>University scholarships</h2><p class="data">' + cTotal + '</p></div>' +
+      '<p class="muted small" style="margin-top:6px;max-width:66ch">These come from one university. Most are decided when the university gives you an offer, so you usually don\u2019t apply separately. ' +
+      ((p.target_schools || []).length ? 'Only showing the ' + p.target_schools.length + ' universit' + (p.target_schools.length === 1 ? 'y' : 'ies') + ' you picked.' : 'Add the universities you want in your answers to make this list shorter.') +
+      (universitiesLoaded ? '' : ' Still loading more university scholarships\u2026') +
       '</p></div>';
     var cList = collegeOut.buckets.eligible_now.concat(collegeOut.buckets.eligible_if_you_act, collegeOut.buckets.competitive_stretch);
-    html += cList.length ? cList.slice(0, 24).map(resultCard).join('') : '<p class="null">Nothing here for your profile and filters.</p>';
-    html += '<div class="row" style="margin-top:14px"><a class="btn btn-sm" href="#/schools">Browse all university awards</a></div></section>';
+    html += cList.length ? cList.slice(0, 24).map(resultCard).join('') : '<p class="null">None for your answers.</p>';
+    if (cList.length > 24) html += '<p class="small dim" style="margin-top:10px">Showing the first 24 of ' + cList.length + '. Add the universities you want to see the rest.</p>';
+    html += '<div class="row" style="margin-top:14px"><a class="btn btn-sm" href="#/schools">See all university scholarships</a></div></section>';
 
     html += ctaBlock(p);
     return html + '</div>';
@@ -944,9 +1010,28 @@
       bits.push(g ? g.label : p.course_groups[0]);
     }
     if ((p.destinations || []).length) bits.push('→ ' + p.destinations.slice(0, 2).map(cname).join(', '));
-    if (p.application_year) bits.push(p.application_year + ' cycle');
+    if (p.application_year) bits.push('applying ' + p.application_year);
     if (p.age != null) bits.push('age ' + p.age);
     return bits.map(function (b) { return '<span class="badge">' + esc(b) + '</span>'; }).join('');
+  }
+
+  function coverageLabel(s) {
+    return s.coverage_type ? (COVERAGE_LABEL[s.coverage_type] || titleCase(s.coverage_type)) : 'Amount not given';
+  }
+
+  /* Some Indian state and central schemes are only for SC, ST, OBC or minority
+     students. The data has no rule for this and the form (rightly) does not ask
+     caste, so without this note a general applicant sees them as "You could
+     qualify" with nothing to check. Name-based, so it only adds a warning. */
+  var COMMUNITY_RE_WORDS = /scheduled caste|scheduled tribe|tribal (?:welfare|affairs)|backward class|minorit|dalit|adi dravidar|denotified|ambedkar overseas vidya nidhi/i;
+  var COMMUNITY_RE_CODES = /\b(?:SC|ST|OBC|EBC)\b/;
+  function communityOnly(s) {
+    var t = (s.name || '') + ' ' + (s.funder_name || '');
+    return COMMUNITY_RE_WORDS.test(t) || COMMUNITY_RE_CODES.test(t);
+  }
+  function communityNote(s) {
+    return communityOnly(s) ? '<div class="snippet"><strong>Only for some communities:</strong> This scheme is for students from ' +
+      'certain groups, for example SC, ST, OBC or minority students. Read the funder\u2019s rules to see if you can apply.</div>' : '';
   }
 
   function resultCard(r) {
@@ -954,29 +1039,34 @@
     var pct = Math.max(2, Math.min(100, Math.round((r.fit_score || 0) * 100)));
     var why = '';
     if (r.bucket === 'not_eligible' && r.failing_rules && r.failing_rules.length) {
-      why = '<div class="snippet"><strong>Ruled out by:</strong> ' + esc(humanize(r.failing_rules[0].explanation) || ruleText(r.failing_rules[0].criterion)) + '</div>';
+      why = '<div class="snippet"><strong>Why not:</strong> ' + esc(humanize(r.failing_rules[0].rule_text || ruleText(r.failing_rules[0].criterion))) +
+        '. ' + esc(humanize(r.failing_rules[0].explanation || '')) + '</div>';
     } else if (r.bucket === 'eligible_if_you_act' && r.blocking_actions && r.blocking_actions.length) {
-      why = '<div class="snippet"><strong>To become eligible:</strong> ' + r.blocking_actions.map(function (a) { return esc(humanize(a.label || a.description || a.kind)); }).join(' · ') + '</div>';
+      why = '<div class="snippet"><strong>What to do first:</strong><ul style="margin:6px 0 0;padding-left:18px">' +
+        r.blocking_actions.map(function (a) { return '<li>' + esc(humanize(a.label || a.description || a.kind)) + '</li>'; }).join('') + '</ul></div>';
     } else if (r.reason) {
       why = '<div class="snippet">' + esc(humanize(r.reason)) + '</div>';
     }
     var need = needBasedRules(s).length;
+    var next = nextDeadline(s);
+    var dl = next ? fmtDate(next) : (s.deadline_date ? fmtDate(s.deadline_date) + ' (passed)' : 'not given');
     return '<article class="card">' +
       '<div class="spread"><div style="min-width:0"><p class="label">' + esc(s.funder_name || '') + (s.school_name ? ' · ' + esc(s.school_name) : '') + '</p>' +
       '<h3 style="margin-top:5px"><a href="#/scholarships/' + esc(s.slug) + '">' + esc(s.name) + '</a></h3></div>' +
       '<div class="row" style="justify-content:flex-end">' + statusBadge(s) + '</div></div>' +
-      '<div class="row" style="margin-top:12px"><span class="badge">' + esc(s.coverage_type ? titleCase(s.coverage_type) : 'COVERAGE NOT PUBLISHED') + '</span>' +
+      '<div class="row" style="margin-top:12px"><span class="badge">' + esc(coverageLabel(s)) + '</span>' +
         (s.study_levels || []).slice(0, 3).map(function (l) { return '<span class="badge">' + esc(levelLabel(l)) + '</span>'; }).join('') +
-        (need ? '<span class="badge badge-steel">NEED-BASED</span>' : '') +
-        (isCollegeSpecific(s) ? '<span class="badge">UNIVERSITY AWARD</span>' : '') +
+        (need ? '<span class="badge badge-steel">BASED ON NEED</span>' : '') +
+        (isCollegeSpecific(s) ? '<span class="badge">UNIVERSITY</span>' : '') +
       '</div>' +
       '<p style="margin-top:12px">' + (s.value_verbatim ? esc(s.value_verbatim) : nullState('award value', s.source_url)) + '</p>' +
-      '<p class="small dim" style="margin-top:8px">Deadline: ' + (s.deadline_date ? esc(fmtDate(s.deadline_date)) : 'not published') +
-        ((s.destination_countries || []).length ? ' · Study in ' + esc(s.destination_countries.slice(0, 3).map(cname).join(', ')) : '') + '</p>' +
-      why +
+      '<p class="small dim" style="margin-top:8px">Deadline: ' + esc(dl) +
+        ((s.destination_countries || []).length ? ' · Study in ' + esc(s.destination_countries.slice(0, 3).map(destName).join(', ')) +
+          (s.destination_countries.length > 3 ? ' and ' + (s.destination_countries.length - 3) + ' more' : '') : '') + '</p>' +
+      communityNote(s) + why +
       '<div style="margin-top:14px"><div class="bar"><span style="width:' + pct + '%"></span></div>' +
       '<p class="label" style="margin-top:7px">' + esc(rankReason(r)) + '</p></div>' +
-      '<div class="row" style="margin-top:14px"><a class="btn btn-sm" href="#/scholarships/' + esc(s.slug) + '">Open record</a>' +
+      '<div class="row" style="margin-top:14px"><a class="btn btn-sm" href="#/scholarships/' + esc(s.slug) + '">See details</a>' +
       '<button class="btn btn-sm" data-save="' + esc(s.slug) + '">' + (loadShortlist().indexOf(s.slug) >= 0 ? 'Saved ✓' : 'Save') + '</button></div>' +
       '</article>';
   }
@@ -989,22 +1079,21 @@
    */
   function rankReason(r) {
     var f = r.factors || {}, s = r.scholarship, bits = [];
-    if (f.value_score >= 0.85) bits.push('covers the most');
-    else if (f.value_score <= 0.4) bits.push('partial support');
-    if (f.fit >= 0.85) bits.push('close match to your profile');
-    else if (f.fit <= 0.45) bits.push('loose match');
-    if (f.competition_factor >= 2.5) bits.push('few awards, very competitive');
-    else if (f.competition_factor <= 1.3) bits.push('many awards given');
-    var d = s.deadline_date ? daysUntil(s.deadline_date) : null;
-    if (s.status === 'open' && d !== null && d >= 0 && d <= 30) bits.push('closing soon');
-    else if (s.status === 'cycle_closed') bits.push('waiting on the next round');
-    return bits.length ? 'RANKED HERE BECAUSE: ' + bits.join(' · ') : 'RANKED ON VALUE, FIT, COMPETITION AND DEADLINE';
+    if (f.value_score >= 0.85) bits.push('pays for the most');
+    else if (f.value_score <= 0.4) bits.push('pays for part');
+    if (f.fit >= 0.85) bits.push('fits your answers well');
+    else if (f.fit <= 0.45) bits.push('fits your answers loosely');
+    if (f.competition_factor >= 2.5) bits.push('few places, hard to get');
+    else if (f.competition_factor <= 1.3) bits.push('many places');
+    var next = nextDeadline(s), d = next ? daysUntil(next) : null;
+    if (isOpenNow(s) && d !== null && d <= 30) bits.push('closes soon');
+    else if (!isOpenNow(s)) bits.push('next round not open yet');
+    return bits.length ? 'WHY IT IS HERE: ' + bits.join(' · ') : 'SORTED BY HOW MUCH IT PAYS, FIT, PLACES AND DEADLINE';
   }
+  /** A rule in plain words, with country codes turned into names. */
   function ruleText(c) {
     if (!c) return '';
-    var v = Array.isArray(c.value) ? c.value.map(function (x) { return V.COUNTRY_NAME[x] || x; }).join(', ')
-      : (V.COUNTRY_NAME[c.value] || c.value);
-    return humanize(titleCase(c.attribute) + ' ' + String(c.operator).replace(/_/g, ' ') + ' ' + v);
+    return humanize(CORE.plainRule ? CORE.plainRule(c) : (c.attribute + ' ' + c.operator + ' ' + JSON.stringify(c.value)));
   }
 
   // ------------------------------------------------------------ record page
@@ -1016,8 +1105,9 @@
     var mine = null;
     if (p && p.nationality && p.study_level) {
       var ev = CORE.matchScholarships(p, [s], NOW);
-      mine = ev.buckets.eligible_now[0] || ev.buckets.eligible_if_you_act[0] ||
-             ev.buckets.competitive_stretch[0] || ev.buckets.not_eligible[0];
+      // Every group, including "not checked yet". Leaving that one out made the
+      // page say "no profile yet" to people who had filled everything in.
+      BUCKET_ORDER.forEach(function (k) { if (!mine && ev.buckets[k] && ev.buckets[k][0]) mine = ev.buckets[k][0]; });
     }
     var byRule = {};
     if (mine && mine.evaluations) mine.evaluations.forEach(function (e) { byRule[ruleKey(e.criterion)] = e; });
@@ -1027,50 +1117,52 @@
 
     return '' +
     '<div class="wrap section">' +
-      '<p class="small"><a href="#/explore">Register</a> <span class="dim">/</span> ' +
-        esc(cname((s.destination_countries || [])[0]) || 'Global') +
+      '<p class="small"><a href="#/explore">All scholarships</a> <span class="dim">/</span> ' +
+        esc(destName((s.destination_countries || [])[0]) || 'Any country') +
         (s.school_name ? ' <span class="dim">/</span> <a href="#/schools">' + esc(s.school_name) + '</a>' : '') + '</p>' +
 
       '<div style="margin-top:18px"><p class="label">' + esc(s.funder_name || '') + '</p>' +
       '<h1 style="margin-top:8px">' + esc(s.name) + '</h1></div>' +
 
       '<div class="row" style="margin-top:16px">' + statusBadge(s) + freshnessBadge(s) +
-        '<span class="badge">' + esc(s.coverage_type ? titleCase(s.coverage_type) : 'COVERAGE NOT PUBLISHED') + '</span>' +
+        '<span class="badge">' + esc(coverageLabel(s)) + '</span>' +
         (s.study_levels || []).map(function (l) { return '<span class="badge">' + esc(levelLabel(l)) + '</span>'; }).join('') +
-        (isCollegeSpecific(s) ? '<span class="badge badge-steel">UNIVERSITY-SPECIFIC</span>' : '') +
+        (isCollegeSpecific(s) ? '<span class="badge badge-steel">UNIVERSITY SCHOLARSHIP</span>' : '') +
       '</div>' +
 
       '<div class="row" style="margin-top:20px">' +
-        (s.application_url ? '<a class="btn btn-primary" href="' + esc(s.application_url) + '" target="_blank" rel="noreferrer">Apply on the official page</a>' : '') +
-        '<button class="btn" data-save="' + esc(s.slug) + '">' + (saved ? 'Saved ✓' : 'Save to my calendar') + '</button></div>' +
+        (s.application_url || s.source_url ? '<a class="btn btn-primary" href="' + esc(s.application_url || s.source_url) + '" target="_blank" rel="noreferrer">' +
+          (/^mailto:/i.test(s.application_url || '') ? 'Email the funder to apply' : s.application_url ? 'Apply on the funder\u2019s website' : 'Go to the funder\u2019s page') + '</a>' : '') +
+        '<button class="btn" data-save="' + esc(s.slug) + '">' + (saved ? 'Saved ✓' : 'Save') + '</button></div>' +
 
-      (mine ? verdictBlock(mine) : '<div class="banner" style="margin-top:26px"><p class="label">NO PROFILE YET</p><p class="muted" style="margin-top:8px">Fill in the intake and every rule below is ticked against you. <a href="#/intake">Start the intake</a>.</p></div>') +
+      (communityOnly(s) ? '<div style="margin-top:18px">' + communityNote(s) + '</div>' : '') +
+      (mine ? verdictBlock(mine) : '<div class="banner" style="margin-top:26px"><p class="label">NO DETAILS YET</p><p class="muted" style="margin-top:8px">Tell us about you and we will check each rule below for you. <a href="#/intake">Start here</a>.</p></div>') +
       documentHelp(s) +
 
-      (need.length ? '<div class="banner" style="margin-top:16px;border-color:var(--steel)"><p class="label" style="color:var(--steel)">NEED-BASED AWARD</p>' +
-        '<p class="muted small" style="margin-top:8px;max-width:66ch">This funder assesses financial need in prose, not against a number, so no engine can tell you whether you qualify. What they published:</p>' +
+      (need.length ? '<div class="banner" style="margin-top:16px;border-color:var(--steel)"><p class="label" style="color:var(--steel)">BASED ON NEED</p>' +
+        '<p class="muted small" style="margin-top:8px;max-width:66ch">This funder decides on money need in their own words, not with a number. So we can\u2019t tell you if you qualify. Here is what they say:</p>' +
         need.map(function (c) { return '<p class="snippet">“' + esc(c.source_snippet || c.value) + '”</p>'; }).join('') +
-        (p && p.declares_financial_need ? '<p class="small" style="margin-top:10px">You said you will apply as a need-based candidate. Expect to evidence that with documents.</p>' : '') +
+        (p && p.declares_financial_need ? '<p class="small" style="margin-top:10px">You said you need money to study. Be ready to show documents that prove it.</p>' : '') +
         '</div>' : '') +
 
-      (numericNeed.length ? '<div class="banner" style="margin-top:16px"><p class="label">PUBLISHED INCOME CAP</p>' +
+      (numericNeed.length ? '<div class="banner" style="margin-top:16px"><p class="label">INCOME LIMIT</p>' +
         numericNeed.map(function (c) {
           var mineAmt = p && p.household_income_amount;
-          return '<p style="margin-top:8px">Cap: <strong>' + esc(c.value.toLocaleString('en')) + '</strong>' +
-            (mineAmt != null ? ' · you entered <strong>' + esc(fmtMoney(mineAmt, p.household_income_currency)) + '</strong>' : ' · you have not entered an income') +
-            '</p><p class="small dim" style="margin-top:4px">The funder does not state the currency of this cap on the page we read. Confirm it on the official page before relying on this comparison.</p>' +
+          return '<p style="margin-top:8px">Limit: <strong>' + esc(c.value.toLocaleString('en')) + '</strong>' +
+            (mineAmt != null ? ' · you entered <strong>' + esc(fmtMoney(mineAmt, p.household_income_currency)) + '</strong>' : ' · you haven\u2019t entered an income') +
+            '</p><p class="small dim" style="margin-top:4px">Check on the funder\u2019s page which currency this is in, and if it is per year or per month. We only compare it with yours when the currency is clearly the same.</p>' +
             '<p class="snippet">“' + esc(c.source_snippet || '') + '”</p>';
         }).join('') + '</div>' : '') +
 
       '<hr class="rule">' +
-      '<h2>What it is worth</h2>' +
+      '<h2>What you get</h2>' +
       valueBlock(s) +
       '<div class="grid grid-2" style="margin-top:16px">' +
-        kv('Duration', s.duration_note, s.source_url) +
-        kv('Number of awards', s.number_of_awards != null ? String(s.number_of_awards) : s.award_count_note, s.source_url) +
-        kv('Renewable', s.renewable == null ? null : (s.renewable ? 'Yes. ' + (s.renewal_conditions || 'Conditions are on the official page.') : 'No'), s.source_url) +
+        kv('How long', s.duration_note, s.source_url) +
+        kv('How many scholarships', s.number_of_awards != null ? String(s.number_of_awards) : s.award_count_note, s.source_url) +
+        kv('Can it be renewed?', s.renewable == null ? null : (s.renewable ? 'Yes. ' + (s.renewal_conditions || 'See the funder\u2019s page for the conditions.') : 'No'), s.source_url) +
         kv('Where you can study', (s.destination_countries || []).length ? s.destination_countries.map(cname).join(', ') : null, s.source_url) +
-        kv('Who can apply (nationality)', (s.eligible_nationalities || []).length ? s.eligible_nationalities.map(cname).join(', ') : null, s.source_url) +
+        kv('Which nationalities can apply', (s.eligible_nationalities || []).length ? s.eligible_nationalities.map(cname).join(', ') : null, s.source_url) +
       '</div>' +
 
       '<hr class="rule">' + timelineBlock(s) +
@@ -1090,39 +1182,40 @@
   function timelineBlock(s) {
     var items = [];
     if (s.application_opens) items.push({ d: s.application_opens, t: 'Applications open', k: 'open' });
-    (s.rounds || []).forEach(function (r) { if (r.deadline) items.push({ d: r.deadline, t: r.round || 'Round deadline', k: 'round' }); });
-    if (s.deadline_date) items.push({ d: s.deadline_date, t: 'Application deadline' + (s.deadline_type ? ' (' + titleCase(s.deadline_type) + ')' : ''), k: 'deadline' });
+    (s.rounds || []).forEach(function (r) { if (r.deadline) items.push({ d: r.deadline, t: r.round ? 'Round ' + String(r.round).replace(/^round\s*/i, '') + ' deadline' : 'Round deadline', k: 'round' }); });
+    if (s.deadline_date) items.push({ d: s.deadline_date, t: 'Last day to apply', k: 'deadline' });
     items.sort(function (a, b) { return a.d < b.d ? -1 : 1; });
 
-    return '<h2>Timeline</h2>' +
-      '<p class="muted small" style="margin-top:8px;max-width:64ch">Only dates the funder published. Nothing here is estimated.</p>' +
+    return '<h2>Key dates</h2>' +
+      '<p class="muted small" style="margin-top:8px;max-width:64ch">Only dates the funder published. We never guess dates.</p>' +
+      (s.deadline_note ? '<p class="small muted" style="margin-top:8px;max-width:66ch"><strong>Funder\u2019s note:</strong> ' + esc(s.deadline_note) + '</p>' : '') +
       '<div class="card" style="margin-top:16px">' +
-        (!items.length ? '<p class="null">NOT PUBLISHED: no dates for this award</p>' :
+        (!items.length ? '<p class="null">The funder hasn\u2019t published any dates for this scholarship.</p>' :
           items.map(function (i) {
             var d = daysUntil(i.d);
             return '<div class="step"><span class="stepno">' + (i.k === 'deadline' ? '!' : '·') + '</span><div style="min-width:0">' +
               '<p><strong>' + esc(fmtDate(i.d)) + '</strong>: ' + esc(i.t) + '</p>' +
-              '<p class="small dim" style="margin-top:4px">' + (d < 0 ? 'passed ' + Math.abs(d) + ' days ago' : 'in ' + d + ' days') + '</p></div></div>';
+              '<p class="small dim" style="margin-top:4px">' + (d === null ? '' : d < 0 ? Math.abs(d) + ' day' + (d === -1 ? '' : 's') + ' ago' : d === 0 ? 'today' : 'in ' + d + ' day' + (d === 1 ? '' : 's')) + '</p></div></div>';
           }).join('')) +
-        (s.decision_timeline_note ? '<p class="small muted" style="margin-top:14px"><strong>Decision:</strong> ' + esc(s.decision_timeline_note) + '</p>' : '<p class="null" style="margin-top:14px">NOT PUBLISHED: decision timeline</p>') +
-        (s.status === 'cycle_closed' ? '<p class="null" style="margin-top:12px">This cycle has closed. The historic dates are kept so you can plan the next round, no next-cycle date is asserted unless the funder published one.</p>' : '') +
+        (s.decision_timeline_note ? '<p class="small muted" style="margin-top:14px"><strong>When they decide:</strong> ' + esc(s.decision_timeline_note) + '</p>' : '<p class="null" style="margin-top:14px">The funder doesn\u2019t say when they decide.</p>') +
+        (!isOpenNow(s) && s.status !== 'discontinued' && hasAnyDate(s) ? '<p class="null" style="margin-top:12px">This round has closed. We keep the old dates to help you plan for next time. We only show a new date once the funder publishes it.</p>' : '') +
       '</div>';
   }
 
   function eligibilityBlock(s, byRule, hasProfile) {
-    return '<h2>Eligibility rules</h2>' +
-      '<p class="muted small" style="margin-top:8px;max-width:66ch">Each rule is quoted from the official page. ' +
-        (hasProfile ? 'Ticks are computed against your profile. A dashed box means the funder published a rule we cannot check, because you have not given us that detail yet.' : 'Fill in the intake to have these ticked against you.') + '</p>' +
+    return '<h2>Who can apply</h2>' +
+      '<p class="muted small" style="margin-top:8px;max-width:66ch">Each rule comes from the funder\u2019s page. ' +
+        (hasProfile ? '\u2713 means you meet it. \u2715 means you don\u2019t. ? means we couldn\u2019t check it, usually because you haven\u2019t told us, or the rule is in words we can\u2019t check.' : '<a href="#/intake">Tell us about you</a> to see which rules you meet.') + '</p>' +
       '<div class="card" style="margin-top:16px">' +
-      (!(s.criteria || []).length ? '<p class="null">NOT PUBLISHED: eligibility rules</p>' :
+      (!(s.criteria || []).length ? '<p class="null">We haven\u2019t recorded the rules for this scholarship yet. Read them on the funder\u2019s page.</p>' :
         s.criteria.map(function (c) {
           var ev = byRule[ruleKey(c)], st = ev ? ev.status : null;
           var cls = st === 'satisfied' ? 'ok' : st === 'failed' ? 'no' : 'unk';
           var mark = st === 'satisfied' ? '✓' : st === 'failed' ? '✕' : '?';
           return '<div class="crit"><span class="tick ' + cls + '" aria-hidden="true">' + mark + '</span><div style="min-width:0">' +
-            '<p><strong>' + esc(ruleText(c)) + '</strong> ' + (c.is_hard ? '<span class="badge badge-warn">HARD</span>' : '<span class="badge">PREFERRED</span>') + '</p>' +
+            '<p><strong>' + esc(ruleText(c)) + '</strong> ' + (c.is_hard ? '<span class="badge badge-warn">MUST HAVE</span>' : '<span class="badge">PREFERRED</span>') + '</p>' +
             (ev ? '<p class="small dim" style="margin-top:5px">' + esc(humanize(ev.explanation)) + '</p>' : '') +
-            (c.source_snippet ? '<p class="snippet">“' + esc(c.source_snippet) + '”</p>' : '<p class="small dim" style="margin-top:5px">No verbatim snippet recorded for this rule.</p>') +
+            (c.source_snippet ? '<p class="snippet">“' + esc(c.source_snippet) + '”</p>' : '<p class="small dim" style="margin-top:5px">We don\u2019t have the funder\u2019s exact words for this rule.</p>') +
           '</div></div>';
         }).join('')) + '</div>';
   }
@@ -1138,7 +1231,7 @@
         esc(V.HELP_COPY[svc].name) + ' helps with this</a> <span class="dim">' + esc(V.HELP_COPY[svc].line) + '</span></p>' : '';
       return '<div class="crit"><span class="tick" aria-hidden="true">' + (i + 1) + '</span><div style="min-width:0">' +
         '<p><strong>' + esc(q.item) + '</strong> ' + (q.mandatory ? '<span class="badge badge-warn">REQUIRED</span>' : '<span class="badge">OPTIONAL</span>') +
-        (svc ? ' <span class="badge badge-steel">' + (svc === 'resume' ? 'CV WORK' : 'WRITTEN WORK') + '</span>' : '') + '</p>' +
+        (svc ? ' <span class="badge badge-steel">' + (svc === 'resume' ? 'CV' : 'WRITING') + '</span>' : '') + '</p>' +
         (q.spec ? '<p class="small muted" style="margin-top:5px">' + esc(q.spec) + '</p>' : '') +
         (q.prompt_text ? '<p class="snippet">Prompt: “' + esc(q.prompt_text) + '”</p>' : '') + help +
       '</div></div>';
@@ -1146,65 +1239,65 @@
 
     var summary = '';
     if (svcCount.resume || svcCount.consulting) {
-      summary = '<div class="banner" style="margin-top:16px"><p class="label">WHERE INVOLVE HELPS ON THIS ONE</p>' +
-        (svcCount.resume ? '<p class="small" style="margin-top:8px">' + svcCount.resume + ' item' + (svcCount.resume === 1 ? '' : 's') +
-          ' need a CV in academic format. See <a href="' + esc(V.HELP_COPY.resume.url) + '" target="_blank" rel="noreferrer">Involve Resume</a>.</p>' : '') +
-        (svcCount.consulting ? '<p class="small" style="margin-top:6px">' + svcCount.consulting + ' item' + (svcCount.consulting === 1 ? '' : 's') +
-          ' are essays, statements, references or interviews. See <a href="' + esc(V.HELP_COPY.consulting.url) + '" target="_blank" rel="noreferrer">Involve Consulting</a>.</p>' : '') +
+      summary = '<div class="banner" style="margin-top:16px"><p class="label">WHERE INVOLVE CAN HELP</p>' +
+        (svcCount.resume ? '<p class="small" style="margin-top:8px">' + svcCount.resume + ' item' + (svcCount.resume === 1 ? ' needs' : 's need') +
+          ' an academic CV. See <a href="' + esc(V.HELP_COPY.resume.url) + '" target="_blank" rel="noreferrer">Involve Resume</a>.</p>' : '') +
+        (svcCount.consulting ? '<p class="small" style="margin-top:6px">' + svcCount.consulting + ' item' + (svcCount.consulting === 1 ? ' is an essay, statement, reference or interview' : 's are essays, statements, references or interviews') +
+          '. See <a href="' + esc(V.HELP_COPY.consulting.url) + '" target="_blank" rel="noreferrer">Involve Consulting</a>.</p>' : '') +
         '</div>';
     }
 
-    return '<h2>Document checklist</h2>' +
-      '<div class="card" style="margin-top:16px">' + (reqs.length ? rows : '<p class="null">NOT PUBLISHED: document checklist</p>') + '</div>' + summary;
+    return '<h2>Documents you need</h2>' +
+      '<div class="card" style="margin-top:16px">' + (reqs.length ? rows : '<p class="null">The funder doesn\u2019t list the documents. Check their page.</p>') + '</div>' + summary;
   }
 
   function procedureBlock(s) {
     var steps = (s.procedure_steps || []).slice().sort(function (a, b) { return (a.step_no || 0) - (b.step_no || 0); });
     return '<h2>How to apply</h2>' +
       '<div class="card" style="margin-top:16px">' +
-      (!steps.length ? '<p class="null">NOT PUBLISHED: application procedure</p>' :
+      (!steps.length ? '<p class="null">The funder doesn\u2019t explain the steps. Check their page.</p>' :
         steps.map(function (st) {
           return '<div class="step"><span class="stepno">' + esc(st.step_no) + '</span><div style="min-width:0">' +
-            '<p><strong>' + esc(st.title) + '</strong> <span class="badge">' + esc(titleCase(st.owner || 'unspecified')) + ' does this</span></p>' +
+            '<p><strong>' + esc(st.title) + '</strong> <span class="badge">' + esc(st.owner === 'applicant' ? 'You do this' : st.owner ? titleCase(st.owner) + ' does this' : 'Who does this: not given') + '</span></p>' +
             (st.detail ? '<p class="small muted" style="margin-top:5px">' + esc(st.detail) + '</p>' : '') +
             (st.url ? '<p class="small" style="margin-top:5px"><a href="' + esc(st.url) + '" target="_blank" rel="noreferrer">' + esc(st.url) + '</a></p>' : '') +
           '</div></div>';
         }).join('')) +
-      (s.requires_nomination === true ? '<p class="null" style="margin-top:14px">Requires nomination, so you cannot apply directly. ' + esc(s.nomination_note || '') + '</p>' : '') +
-      (s.requires_university_admission_first === true ? '<p class="null" style="margin-top:10px">You must hold university admission before applying.</p>' : '') +
-      (s.requires_university_admission_first == null ? '<p class="null" style="margin-top:10px">Whether admission is needed first is NOT PUBLISHED. Check the official page.</p>' : '') +
+      (s.requires_nomination === true ? '<p class="null" style="margin-top:14px">You need to be nominated. You can\u2019t apply on your own. ' + esc(s.nomination_note || '') + '</p>' : '') +
+      (s.requires_university_admission_first === true ? '<p class="null" style="margin-top:10px">You need a university offer before you apply.</p>' : '') +
+      (s.requires_university_admission_first == null ? '<p class="null" style="margin-top:10px">The funder doesn\u2019t say if you need a university offer first. Check their page.</p>' : '') +
       '</div>';
   }
 
   function catchesBlock(s) {
-    var rows = [['Bond or return clause', s.bond_or_return_clause], ['Work restrictions during the award', s.work_restrictions],
-      ['Tax treatment', s.taxable_note], ['Combinable with other awards', s.combinable_with_other_awards]];
-    return '<h2>Catches</h2><p class="muted small" style="margin-top:8px;max-width:64ch">The conditions that are easy to miss. A blank here means the funder did not publish it. It does not mean there is no catch.</p>' +
+    var rows = [['Do you have to go home or work somewhere after?', s.bond_or_return_clause], ['Limits on working while you study', s.work_restrictions],
+      ['Tax', s.taxable_note], ['Can you combine it with other scholarships?', s.combinable_with_other_awards]];
+    return '<h2>Things to watch out for</h2><p class="muted small" style="margin-top:8px;max-width:64ch">Conditions that are easy to miss. \u201cNot given\u201d means the funder didn\u2019t say. It does not mean there is no condition.</p>' +
       '<div class="grid grid-2" style="margin-top:16px">' + rows.map(function (c) { return kv(c[0], c[1], s.source_url); }).join('') + '</div>';
   }
 
   function provenanceBlock(s) {
-    return '<h2>Where this came from</h2><div class="card" style="margin-top:16px">' +
+    return '<h2>Where we got this</h2><div class="card" style="margin-top:16px">' +
       '<div class="row">' + freshnessBadge(s) + (s.verification_status === 'official_page_verified' ? '<span class="badge">CHECKED ON THE FUNDER\u2019S OWN PAGE</span>' : '') + '</div>' +
       '<p class="snippet" style="margin-top:14px">“' + esc(s.source_snippet) + '”</p>' +
       '<p class="small" style="margin-top:14px"><a href="' + esc(s.source_url) + '" target="_blank" rel="noreferrer">' + esc(s.source_url) + '</a></p>' +
-      '<p class="small dim" style="margin-top:10px">Last verified ' + esc(fmtDate(s.last_verified_at) || 'date not recorded') +
-      '. Funders change their pages without notice. Always confirm on the official page before you rely on anything here.</p></div>';
+      '<p class="small dim" style="margin-top:10px">We last checked this on ' + esc(fmtDate(s.last_verified_at) || 'a date we did not record') +
+      '. Funders can change their pages at any time. Always check the funder\u2019s page before you apply.</p></div>';
   }
 
   function verdictBlock(r) {
     var meta = BUCKET_META[r.bucket], body = '';
     if (r.bucket === 'not_eligible' && r.failing_rules && r.failing_rules.length) {
       body = '<ul style="margin:10px 0 0;padding-left:18px">' + r.failing_rules.map(function (fr) {
-        return '<li class="small">' + esc(humanize(fr.explanation) || ruleText(fr.criterion)) +
+        return '<li class="small"><strong>' + esc(ruleText(fr.criterion)) + '.</strong> ' + esc(humanize(fr.explanation)) +
           (fr.criterion && fr.criterion.source_snippet ? '<span class="snippet">“' + esc(fr.criterion.source_snippet) + '”</span>' : '') + '</li>';
       }).join('') + '</ul>';
     } else if (r.blocking_actions && r.blocking_actions.length) {
       body = '<ul style="margin:10px 0 0;padding-left:18px">' + r.blocking_actions.map(function (a) {
         return '<li class="small">' + esc(humanize(a.label || a.description || a.kind)) + '</li>';
       }).join('') + '</ul>';
-    } else if (r.reason) body = '<p class="small muted" style="margin-top:10px">' + esc(humanize(r.reason)) + '</p>';
-    return '<div class="banner" style="margin-top:26px"><p class="label">YOUR VERDICT</p>' +
+    } else if (r.reason && r.bucket !== 'rules_not_checked') body = '<p class="small muted" style="margin-top:10px">' + esc(humanize(r.reason)) + '</p>';
+    return '<div class="banner" style="margin-top:26px"><p class="label">YOUR RESULT</p>' +
       '<p style="margin-top:8px"><strong>' + esc(meta.title) + '</strong>: ' + esc(meta.blurb) + '</p>' + body + '</div>';
   }
 
@@ -1227,12 +1320,12 @@
 
   var COVERAGE_LABEL = {
     full_ride: 'Everything covered',
-    full_tuition: 'Full tuition',
+    full_tuition: 'All tuition fees',
     partial_tuition: 'Part of your tuition',
     stipend_only: 'Living costs only',
     travel_only: 'Travel only',
     fee_waiver: 'Fees waived',
-    loan_subsidy: 'Loan subsidy'
+    loan_subsidy: 'Help with a loan'
   };
   var EXTRA_LABEL = {
     travel: 'Travel', insurance: 'Health insurance', language_course: 'Language course',
@@ -1275,7 +1368,7 @@
     }
 
     return '<div class="card value-card">' +
-      '<p class="label">What you get</p>' +
+      '<p class="label">In short</p>' +
       ((head || stipend)
         ? '<div class="value-head">' +
             (head ? '<span class="value-headline">' + esc(head) + '</span>' : '') +
@@ -1297,7 +1390,7 @@
             ? '<p class="value-single">' + esc(lines[0]) + '</p>'
             : '')) +
       (lines.length
-        ? '<p class="small dim value-src">Quoted from the funder. ' +
+        ? '<p class="small dim value-src">The funder\u2019s own words. ' +
           (s.source_url ? '<a href="' + esc(s.source_url) + '" target="_blank" rel="noopener">See it on their page</a>' : '') +
           '</p>'
         : '') +
@@ -1317,24 +1410,24 @@
   function schoolsPage() {
     if (!universitiesLoaded) {
       ensureUniversities();
-      return '<div class="wrap section"><p class="eyebrow">UNIVERSITY-RUN AWARDS</p>' +
-        '<h1 style="margin-top:10px">Loading university awards…</h1>' +
-        '<p class="muted" style="margin-top:14px">These load separately so the main list stays fast on mobile.</p></div>';
+      return '<div class="wrap section"><p class="eyebrow">UNIVERSITY SCHOLARSHIPS</p>' +
+        '<h1 style="margin-top:10px">Loading university scholarships…</h1>' +
+        '<p class="muted" style="margin-top:14px">These load separately so the site stays fast on phones.</p></div>';
     }
     var byName = {};
     COLLEGE.forEach(function (r) { (byName[r.school_name || 'Unnamed institution'] = byName[r.school_name || 'Unnamed institution'] || []).push(r); });
     var names = Object.keys(byName).sort();
     return '<div class="wrap section">' +
-      '<p class="eyebrow">UNIVERSITY-RUN AWARDS</p>' +
-      '<h1 style="margin-top:10px">Funding held by a named university</h1>' +
-      '<p class="muted" style="margin-top:14px;max-width:64ch">These are listed separately because they work differently: most are decided alongside your admission rather than applied for separately, and you can only hold one if that school admits you. ' +
-      COLLEGE.length + ' records across ' + names.length + ' institutions.</p>' +
+      '<p class="eyebrow">UNIVERSITY SCHOLARSHIPS</p>' +
+      '<h1 style="margin-top:10px">Scholarships from one university</h1>' +
+      '<p class="muted" style="margin-top:14px;max-width:64ch">These are listed on their own because they work differently. Most are decided when the university gives you an offer. You can only get one if that university accepts you. ' +
+      COLLEGE.length + ' scholarships from ' + names.length + ' universities.</p>' +
       names.map(function (n) {
         var meta = SCHOOL_META[n] || {};
         return '<section style="margin-top:34px"><div class="bucket-head b2"><div class="spread">' +
           '<h2>' + esc(n) + '</h2><p class="data">' + byName[n].length + '</p></div>' +
           '<p class="small dim" style="margin-top:6px">' + esc([meta.city, cname(meta.country_code)].filter(Boolean).join(', ')) +
-          (meta.scholarships_page_url ? ' · <a href="' + esc(meta.scholarships_page_url) + '" target="_blank" rel="noreferrer">official scholarships page</a>' : '') + '</p></div>' +
+          (meta.scholarships_page_url ? ' · <a href="' + esc(meta.scholarships_page_url) + '" target="_blank" rel="noreferrer">university\u2019s scholarship page</a>' : '') + '</p></div>' +
           byName[n].map(simpleCard).join('') + '</section>';
       }).join('') + '</div>';
   }
@@ -1348,10 +1441,10 @@
   /** Shared by both directory views, so the wording is stated once. */
   function directoryCaveat() {
     return '<p class="muted" style="margin-top:14px;max-width:64ch">These come from official ' +
-      'government, agency and university scholarship databases. We list what each one publishes: ' +
-      'the name, who runs it, a short description and the closing date. We then link you to the ' +
-      'official page. <strong>We have not yet gone through their eligibility rules one by one</strong>, ' +
-      'which is what separates these from the matched results elsewhere on this site.</p>';
+      'government and university scholarship lists. For each one we show the name, who runs it, ' +
+      'a short description and the closing date, and link to the funder\u2019s page. ' +
+      '<strong>We haven\u2019t checked the rules for these yet.</strong> ' +
+      'That is the difference from your matched results.</p>';
   }
 
   /**
@@ -1383,9 +1476,9 @@
     var href = esc(l.detail_url);
     if (l.link_kind !== 'index') return '';
     return '<p class="small" style="margin-top:10px">' +
-      '<a class="btn btn-sm" href="' + href + '" target="_blank" rel="noreferrer">Open ' +
-      esc(linkHost(l.detail_url)) + ' award list</a> ' +
-      '<span class="dim">This funder keeps every award on one searchable list, so search it for ' +
+      '<a class="btn btn-sm" href="' + href + '" target="_blank" rel="noreferrer">Open the ' +
+      esc(linkHost(l.detail_url)) + ' list</a> ' +
+      '<span class="dim">This funder keeps all its scholarships on one list. Search it for ' +
       '“' + esc(l.name) + '”.</span></p>';
   }
 
@@ -1394,18 +1487,18 @@
     return '<article class="card"><div class="spread"><div style="min-width:0">' +
       (l.funder_name ? '<p class="label">' + esc(l.funder_name) + '</p>' : '') +
       '<h3 style="margin-top:5px">' + listingLink(l) + '</h3>' +
-      '</div><span class="badge badge-warn">DIRECTORY LISTING</span></div>' +
+      '</div><span class="badge badge-warn">RULES NOT CHECKED</span></div>' +
       (l.summary ? '<p class="small muted" style="margin-top:10px">' + esc(String(l.summary).slice(0, 260)) + '</p>' : '') +
       '<div class="row" style="margin-top:10px">' +
         (l.study_levels || []).map(function (x) { return '<span class="badge">' + esc(levelLabel(x)) + '</span>'; }).join('') +
         (l.deadline_verbatim && !l.deadline_date ? '<span class="badge badge-ember">' + esc(l.deadline_verbatim) + '</span>' : '') +
         (l.deadline_date && d >= 0 ? '<span class="badge badge-ember">' + esc(fmtDate(l.deadline_date)) + '</span>' : '') +
         (l.deadline_date && d < 0 && isRecurring(l) ? recurringBadge() : '') +
-        (l.deadline_date && d < 0 && !isRecurring(l) ? '<span class="badge badge-warn">' + esc(fmtDate(l.deadline_date)) + ' \u00b7 closed</span>' : '') +
+        (l.deadline_date && d < 0 && !isRecurring(l) ? '<span class="badge badge-warn">' + esc(fmtDate(l.deadline_date)) + ' \u00b7 deadline passed</span>' : '') +
       '</div>' +
       listingLinkNote(l) +
-      '<p class="small dim" style="margin-top:10px">Listed by ' + esc(l.source_name || 'an official directory') +
-      '. We have not yet checked the eligibility rules for this one. Open the official page for the full conditions.</p>' +
+      '<p class="small dim" style="margin-top:10px">Found in ' + esc(l.source_name || 'an official list') +
+      '. We haven\u2019t checked the rules for this one yet. Open the funder\u2019s page for the full details.</p>' +
       '</article>';
   }
 
@@ -1413,30 +1506,30 @@
   function directoryPage() {
     if (!listingsLoaded || !LISTING_INDEX) {
       ensureListings();
-      return '<div class="wrap section"><p class="eyebrow">FUNDING DIRECTORY</p>' +
+      return '<div class="wrap section"><p class="eyebrow">SCHOLARSHIP DIRECTORY</p>' +
         '<h1 style="margin-top:10px">Loading the directory…</h1></div>';
     }
     var idx = LISTING_INDEX;
     var shards = idx.shards.slice().sort(function (a, b) { return b.count - a.count; });
     return '<div class="wrap section">' +
-      '<p class="eyebrow">FUNDING DIRECTORY</p>' +
-      '<h1 style="margin-top:10px">' + Number(idx.total).toLocaleString() + ' awards from official directories</h1>' +
+      '<p class="eyebrow">SCHOLARSHIP DIRECTORY</p>' +
+      '<h1 style="margin-top:10px">' + Number(idx.total).toLocaleString() + ' scholarships from official lists</h1>' +
       directoryCaveat() +
       '<div class="grid grid-3" style="margin-top:24px">' +
-        statTile(Number(idx.total).toLocaleString(), 'listings in the directory') +
-        statTile(idx.countries, 'study destinations') +
-        statTile(idx.sources, 'source databases') +
+        statTile(Number(idx.total).toLocaleString(), 'scholarships in the directory') +
+        statTile(idx.countries, 'countries to study in') +
+        statTile(idx.sources, 'official lists we used') +
       '</div>' +
-      '<p class="muted small" style="margin-top:22px;max-width:64ch">Pick a destination. Each one loads on its own, so you never download the whole set.</p>' +
+      '<p class="muted small" style="margin-top:22px;max-width:64ch">Pick a country. Each one loads on its own, so it stays fast.</p>' +
       refreshNote('margin-top:12px;max-width:64ch') +
-      '<div style="overflow-x:auto;margin-top:14px"><table><thead><tr><th>Destination</th><th class="num">Listings</th></tr></thead><tbody>' +
+      '<div style="overflow-x:auto;margin-top:14px"><table><thead><tr><th>Country</th><th class="num">Scholarships</th></tr></thead><tbody>' +
       shards.map(function (s) {
         return '<tr><td><a href="#/directory/' + esc(s.country) + '">' +
           esc(s.country === 'XX' ? 'Not tied to one country' : cname(s.country)) + '</a></td>' +
           '<td class="num">' + Number(s.count).toLocaleString() + '</td></tr>';
       }).join('') +
       '</tbody></table></div>' +
-      '<p class="small dim" style="margin-top:18px">Prefer a plain list? <a href="/d/">Browse every listing as pages</a>. That version is also what search engines read.</p>' +
+      '<p class="small dim" style="margin-top:18px">Want a simple A to Z list? <a href="/d/">Browse the listings as pages</a>. That list is rebuilt less often, so its numbers can be lower.</p>' +
       '</div>';
   }
 
@@ -1447,12 +1540,12 @@
     cc = decodeURIComponent(cc);
     if (!listingsLoaded || !LISTING_INDEX) {
       ensureListings();
-      return '<div class="wrap section"><p class="eyebrow">FUNDING DIRECTORY</p>' +
+      return '<div class="wrap section"><p class="eyebrow">SCHOLARSHIP DIRECTORY</p>' +
         '<h1 style="margin-top:10px">Loading the directory…</h1></div>';
     }
     var meta = shardMeta(cc);
     if (!meta) return notFoundPage('/directory/' + cc);
-    var label = cc === 'XX' ? 'awards not tied to one country' : cname(cc);
+    var label = cc === 'XX' ? 'not tied to one country' : cname(cc);
     if (dirState.cc !== cc) { dirState = { cc: cc, q: '', level: '', page: 0, per: 50, mgmt: false }; }
 
     function draw(rows) {
@@ -1469,13 +1562,13 @@
       var host = el('dirList');
       if (!host) return;
       host.innerHTML =
-        '<p class="small dim" style="margin-top:16px">' + list.length.toLocaleString() + ' listing' +
+        '<p class="small dim" style="margin-top:16px">' + list.length.toLocaleString() + ' scholarship' +
         (list.length === 1 ? '' : 's') +
         (list.length !== rows.length ? ' of ' + rows.length.toLocaleString() : '') +
         ' \u00b7 page ' + (dirState.page + 1) + ' of ' + pages +
         (rows._complete ? '' : ' \u00b7 still loading ' + (rows._total - rows.length).toLocaleString() + ' more') +
         '</p>' +
-        slice.map(directoryCard).join('') +
+        (list.length ? slice.map(directoryCard).join('') : '<p class="null" style="margin-top:12px">Nothing matches. Try fewer or different words, or pick \u201cAny level\u201d.</p>') +
         (pages > 1 ? '<div class="row" style="margin-top:18px">' +
           '<button class="btn btn-sm" id="dirPrev"' + (dirState.page === 0 ? ' disabled' : '') + '>Previous</button>' +
           '<button class="btn btn-sm" id="dirNext"' + (dirState.page >= pages - 1 ? ' disabled' : '') + '>Next</button></div>' : '');
@@ -1492,14 +1585,14 @@
         ctr.setAttribute('data-ready', '1');
         var mgmtCount = rows.filter(function (l) { return l.management; }).length;
         ctr.innerHTML =
-          '<input id="dirQ" class="data" placeholder="Search name, funder or description" style="min-width:280px">' +
-          '<select id="dirL" class="data"><option value="">Any level</option>' +
+          '<label class="sr" for="dirQ">Search</label><input id="dirQ" class="data" type="search" placeholder="Search by name, funder or words">' +
+          '<label class="sr" for="dirL">Level</label><select id="dirL" class="data"><option value="">Any level</option>' +
           Object.keys(levels).sort().map(function (k) {
             return '<option value="' + esc(k) + '">' + esc(levelLabel(k)) + '</option>';
           }).join('') +
           '</select>' +
           (mgmtCount ? '<button type="button" class="btn btn-sm cal-scope" id="dirM"' +
-            (dirState.mgmt ? ' aria-pressed="true"' : '') + '>MBA and management (' + mgmtCount + ')</button>' : '');
+            ' aria-pressed="' + (dirState.mgmt ? 'true' : 'false') + '">MBA and business (' + mgmtCount + ')</button>' : '');
         var qi = el('dirQ'), li = el('dirL'), mi = el('dirM'), t;
         if (mi) mi.onclick = function () {
           dirState.mgmt = !dirState.mgmt;
@@ -1519,9 +1612,9 @@
     ensureCountry(cc, mount, function (rows) { mount(rows); });
 
     return '<div class="wrap section">' +
-      '<p class="small"><a href="#/directory">Funding directory</a> <span class="dim">/</span> ' + esc(label) + '</p>' +
-      '<h1 style="margin-top:14px">' + esc(cc === 'XX' ? 'Awards not tied to one country' : 'Scholarships in ' + label) + '</h1>' +
-      '<p class="muted" style="margin-top:10px">' + Number(meta.count).toLocaleString() + ' listings from official sources.</p>' +
+      '<p class="small"><a href="#/directory">Scholarship directory</a> <span class="dim">/</span> ' + esc(label) + '</p>' +
+      '<h1 style="margin-top:14px">' + esc(cc === 'XX' ? 'Scholarships not tied to one country' : 'Scholarships in ' + label) + '</h1>' +
+      '<p class="muted" style="margin-top:10px">' + Number(meta.count).toLocaleString() + ' scholarships from official lists.</p>' +
       refreshNote('margin-top:8px;max-width:64ch') +
       directoryCaveat() +
       '<div class="row" id="dirControls" style="margin-top:20px"></div>' +
@@ -1535,35 +1628,45 @@
     GENERAL.forEach(function (r) {
       (r.destination_countries && r.destination_countries.length ? r.destination_countries : ['any']).forEach(function (c) {
         var b = byCountry[c] = byCountry[c] || { total: 0, levels: {}, coverage: {}, open: 0 };
-        b.total++; if (r.status === 'open') b.open++;
+        b.total++; if (isOpenNow(r)) b.open++;
         (r.study_levels || []).forEach(function (l) { b.levels[l] = (b.levels[l] || 0) + 1; });
         if (r.coverage_type) b.coverage[r.coverage_type] = (b.coverage[r.coverage_type] || 0) + 1;
       });
     });
     var countries = Object.keys(byCountry).sort(function (a, b) { return byCountry[b].total - byCountry[a].total; });
-    return '<div class="wrap section"><p class="eyebrow">BROWSE ALL FUNDING</p>' +
-      '<h1 style="margin-top:10px">Destination × level × funding type</h1>' +
-      '<p class="muted" style="margin-top:14px;max-width:62ch">Counts update automatically as new awards are added. University-run awards are listed separately on their own page.</p>' +
+    return '<div class="wrap section"><p class="eyebrow">ALL SCHOLARSHIPS</p>' +
+      '<h1 style="margin-top:10px">Scholarships by country</h1>' +
+      '<p class="muted" style="margin-top:14px;max-width:62ch">' + GENERAL.length + ' scholarships from governments and foundations, by the country you would study in. Tap a country to see them. University scholarships are on their own page.</p>' +
       '<div class="row" style="margin-top:20px"><a class="btn btn-sm" href="#/explore/deadlines">Deadlines by month</a>' +
-      '<a class="btn btn-sm" href="#/schools">University awards</a><a class="btn btn-sm" href="#/calendar">My calendar</a></div>' +
-      '<div style="overflow-x:auto;margin-top:26px"><table><thead><tr><th>Destination</th><th class="num">Records</th><th class="num">Open</th>' +
-      V.STUDY_LEVELS.map(function (l) { return '<th class="num">' + esc(l.label) + '</th>'; }).join('') + '<th class="num">Full ride</th></tr></thead><tbody>' +
+      '<a class="btn btn-sm" href="#/schools">University scholarships</a><a class="btn btn-sm" href="#/calendar">Deadline calendar</a></div>' +
+      '<div style="overflow-x:auto;margin-top:26px"><table><thead><tr><th>Country</th><th class="num">Total</th><th class="num">Open now</th>' +
+      V.STUDY_LEVELS.map(function (l) { return '<th class="num">' + esc(l.label) + '</th>'; }).join('') + '<th class="num">Pays for everything</th></tr></thead><tbody>' +
       countries.map(function (c) {
         var b = byCountry[c];
         return '<tr><td><a href="#/explore/' + esc(c) + '">' + esc(cname(c)) + '</a></td><td class="num">' + b.total + '</td><td class="num">' + b.open + '</td>' +
           V.STUDY_LEVELS.map(function (l) { return '<td class="num dim">' + (b.levels[l.key] || '·') + '</td>'; }).join('') +
           '<td class="num dim">' + (b.coverage.full_ride || '·') + '</td></tr>';
       }).join('') + '</tbody></table></div>' +
-      '<p class="small dim" style="margin-top:14px">A record counts once per destination it lists, so column totals exceed ' + GENERAL.length + '.</p></div>';
+      '<p class="small dim" style="margin-top:14px">A scholarship for several countries is counted once for each country, so the columns add up to more than ' + GENERAL.length + '.</p></div>';
   }
 
   function exploreCountryPage(code) {
     code = decodeURIComponent(code);
-    var list = ALL.filter(function (r) { return (r.destination_countries || []).indexOf(code) >= 0; });
-    if (!list.length) return notFoundPage('/explore/' + code);
-    return '<div class="wrap section"><p class="small"><a href="#/explore">Explore</a> <span class="dim">/</span> ' + esc(cname(code)) + '</p>' +
-      '<h1 style="margin-top:14px">Funding to study in ' + esc(cname(code)) + '</h1>' +
-      '<p class="muted" style="margin-top:12px">' + list.length + ' records · ' + list.filter(function (r) { return r.status === 'open'; }).length + ' currently open</p>' +
+    // Same set and same rule as the table on #/explore, so the numbers match:
+    // government and foundation awards only, and "any" includes awards that
+    // name no country at all.
+    var inCountry = function (r) {
+      var dc = r.destination_countries || [];
+      return code === 'any' ? (!dc.length || dc.indexOf('any') >= 0) : dc.indexOf(code) >= 0;
+    };
+    var list = GENERAL.filter(inCountry);
+    var uni = COLLEGE.filter(inCountry).length;
+    if (!list.length && !uni) return notFoundPage('/explore/' + code);
+    var title = code === 'any' ? 'Scholarships for any country' : 'Scholarships to study in ' + cname(code);
+    return '<div class="wrap section"><p class="small"><a href="#/explore">All scholarships</a> <span class="dim">/</span> ' + esc(code === 'any' ? 'Any country' : cname(code)) + '</p>' +
+      '<h1 style="margin-top:14px">' + esc(title) + '</h1>' +
+      '<p class="muted" style="margin-top:12px">' + list.length + ' scholarships from governments and foundations · ' + list.filter(isOpenNow).length + ' open now</p>' +
+      (uni ? '<p class="small dim" style="margin-top:6px">There are also ' + uni + ' university scholarships here. <a href="#/schools">See university scholarships</a>.</p>' : '') +
       '<div style="margin-top:24px">' + list.map(simpleCard).join('') + '</div></div>';
   }
 
@@ -1572,9 +1675,9 @@
       '<p class="label">' + esc(s.funder_name || '') + '</p>' +
       '<h3 style="margin-top:5px"><a href="#/scholarships/' + esc(s.slug) + '">' + esc(s.name) + '</a></h3></div>' + statusBadge(s) + '</div>' +
       '<p style="margin-top:10px">' + (s.value_verbatim ? esc(s.value_verbatim) : nullState('award value', s.source_url)) + '</p>' +
-      '<div class="row" style="margin-top:10px"><span class="badge">' + esc(s.coverage_type ? titleCase(s.coverage_type) : 'COVERAGE NOT PUBLISHED') + '</span>' +
-      (s.deadline_date ? '<span class="badge">' + esc(fmtDate(s.deadline_date)) + '</span>' : '<span class="badge badge-warn">DEADLINE NOT PUBLISHED</span>') +
-      (needBasedRules(s).length ? '<span class="badge badge-steel">NEED-BASED</span>' : '') + '</div></article>';
+      '<div class="row" style="margin-top:10px"><span class="badge">' + esc(coverageLabel(s)) + '</span>' +
+      (s.deadline_date ? '<span class="badge">Deadline ' + esc(fmtDate(nextDeadline(s) || s.deadline_date)) + '</span>' : '<span class="badge badge-warn">NO DEADLINE GIVEN</span>') +
+      (needBasedRules(s).length ? '<span class="badge badge-steel">BASED ON NEED</span>' : '') + '</div></article>';
   }
 
   function deadlinesPage() {
@@ -1583,24 +1686,24 @@
     withDl.forEach(function (r) { (byMonth[String(r.deadline_date).slice(0, 7)] = byMonth[String(r.deadline_date).slice(0, 7)] || []).push(r); });
     var months = Object.keys(byMonth).sort();
     var missing = ALL.length - withDl.length;
-    return '<div class="wrap section"><p class="small"><a href="#/explore">Explore</a> <span class="dim">/</span> deadlines</p>' +
+    return '<div class="wrap section"><p class="small"><a href="#/explore">All scholarships</a> <span class="dim">/</span> Deadlines</p>' +
       '<h1 style="margin-top:14px">Deadlines by month</h1>' +
-      '<p class="muted" style="margin-top:12px;max-width:62ch">Only dates a funder actually published. <strong>' + missing + ' of ' + ALL.length + '</strong> records have no published deadline and are listed at the bottom rather than given an invented date.</p>' +
+      '<p class="muted" style="margin-top:12px;max-width:62ch">All ' + ALL.length + ' scholarships we have checked, including university ones. We only show dates the funder published. <strong>' + missing + '</strong> have no date. They are at the bottom. We never make up a date.</p>' +
       months.map(function (m) {
         var list = byMonth[m].slice().sort(function (a, b) { return a.deadline_date < b.deadline_date ? -1 : 1; });
         var past = new Date(m + '-01') < new Date(NOW.getFullYear(), NOW.getMonth(), 1);
         return '<section style="margin-top:34px"><div class="bucket-head ' + (past ? 'b4' : 'b1') + '"><div class="spread">' +
           '<h2>' + esc(new Date(m + '-01').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })) + '</h2>' +
-          '<p class="data">' + list.length + (past ? ' · past' : '') + '</p></div></div><table><tbody>' +
+          '<p class="data">' + list.length + (past ? ' · passed' : '') + '</p></div></div><div style="overflow-x:auto"><table><tbody>' +
           list.map(function (r) {
             return '<tr><td class="mono small" style="width:110px">' + esc(fmtDate(r.deadline_date)) + '</td>' +
               '<td><a href="#/scholarships/' + esc(r.slug) + '">' + esc(r.name) + '</a><p class="small dim">' + esc(r.funder_name || '') + '</p></td>' +
-              '<td style="width:150px">' + statusBadge(r) + '</td></tr>';
-          }).join('') + '</tbody></table></section>';
+              '<td>' + statusBadge(r) + '</td></tr>';
+          }).join('') + '</tbody></table></div></section>';
       }).join('') +
-      '<section style="margin-top:40px"><div class="bucket-head b4"><div class="spread"><h2>No published deadline</h2><p class="data">' + missing + '</p></div></div>' +
-      '<table><tbody>' + ALL.filter(function (r) { return !r.deadline_date; }).map(function (r) {
-        return '<tr><td><a href="#/scholarships/' + esc(r.slug) + '">' + esc(r.name) + '</a></td><td class="small dim">' + esc(r.deadline_note || 'no note recorded') + '</td></tr>';
+      '<section style="margin-top:40px"><div class="bucket-head b4"><div class="spread"><h2>No date given</h2><p class="data">' + missing + '</p></div></div>' +
+      '<table><tbody>' + ALL.filter(function (r) { return !(r.deadline_date && r.status !== 'discontinued'); }).map(function (r) {
+        return '<tr><td><a href="#/scholarships/' + esc(r.slug) + '">' + esc(r.name) + '</a></td><td class="small dim">' + esc(r.status === 'discontinued' ? 'No longer runs' : (r.deadline_note || 'No note from the funder')) + '</td></tr>';
       }).join('') + '</tbody></table></section></div>';
   }
 
@@ -1626,10 +1729,10 @@
     var hasProfile = !!(p && p.nationality && p.study_level);
 
     if (calState.scope === 'saved') {
-      return { list: saved, label: 'your saved awards', hasProfile: hasProfile, scope: 'saved' };
+      return { list: saved, label: 'your saved scholarships', hasProfile: hasProfile, scope: 'saved' };
     }
     if (calState.scope === 'all' || !hasProfile) {
-      return { list: ALL, label: 'every award in the register', hasProfile: hasProfile, scope: 'all' };
+      return { list: ALL, label: 'every scholarship we have checked', hasProfile: hasProfile, scope: 'all' };
     }
     // profile scope — the awards this person could actually hold
     var pool = applyFilters(GENERAL, p);
@@ -1649,7 +1752,7 @@
     mine.concat(saved).forEach(function (r) {
       if (r && r.slug && !seen[r.slug]) { seen[r.slug] = 1; merged.push(r); }
     });
-    return { list: merged, label: 'awards matched to your profile', hasProfile: true, scope: 'profile' };
+    return { list: merged, label: 'scholarships that fit your answers, plus any you saved', hasProfile: true, scope: 'auto' };
   }
 
   function calendarPage() {
@@ -1697,14 +1800,12 @@
     for (var t = 0; t < trail; t++) cells += '<div class="cal-cell cal-out"></div>';
 
     // ---- everything currently open, under the grid
-    var openNow = pool.list.filter(function (r) {
-      if (r.status === 'discontinued') return false;
-      if (!r.deadline_date) return r.status === 'open';
-      return Date.parse(r.deadline_date) >= now.getTime();
-    }).sort(function (a, b) {
-      if (!a.deadline_date) return 1;
-      if (!b.deadline_date) return -1;
-      return a.deadline_date < b.deadline_date ? -1 : 1;
+    var openNow = pool.list.filter(isOpenNow).sort(function (a, b) {
+      var x = nextDeadline(a), y = nextDeadline(b);
+      if (!x && !y) return 0;
+      if (!x) return 1;
+      if (!y) return -1;
+      return x < y ? -1 : x > y ? 1 : 0;
     });
     var recurringSoon = pool.list.filter(isRecurring);
 
@@ -1714,15 +1815,15 @@
     };
 
     return '<div class="wrap section"><p class="eyebrow">DEADLINE CALENDAR</p>' +
-      '<h1 style="margin-top:10px">When these close</h1>' +
+      '<h1 style="margin-top:10px">When scholarships close</h1>' +
       '<p class="muted" style="margin-top:12px;max-width:64ch">Showing ' + esc(pool.label) +
-      '. ' + pool.list.length.toLocaleString() + ' award' + (pool.list.length === 1 ? '' : 's') +
-      '. Dates are the ones funders published; nothing here is inferred.' +
-      (!pool.hasProfile ? ' <a href="#/intake">Tell us about you</a> and this narrows to awards you can actually hold.' : '') +
+      ': ' + pool.list.length.toLocaleString() + ' scholarship' + (pool.list.length === 1 ? '' : 's') +
+      '. We only show dates the funder published.' +
+      (!pool.hasProfile ? ' <a href="#/intake">Tell us about you</a> to see only the scholarships that fit you.' : '') +
       '</p>' +
 
       '<div class="row noprint" style="margin-top:18px">' +
-        scopeBtn('auto', pool.hasProfile ? 'My matches' : 'My matches (needs profile)') +
+        scopeBtn('auto', pool.hasProfile ? 'My matches' : 'My matches (add your details first)') +
         scopeBtn('saved', 'Saved only') +
         scopeBtn('all', 'Everything') +
       '</div>' +
@@ -1740,8 +1841,8 @@
       '<div class="cal-grid">' + cells + '</div>' +
 
       (recurringSoon.length
-        ? '<div class="card" style="margin-top:22px"><p class="label">RUNS EVERY YEAR, NOT YET OPEN (' + recurringSoon.length + ')</p>' +
-          '<p class="small muted" style="margin-top:8px;max-width:66ch">The funder has not published the next round yet. The month below is when it closed last time, which is the best guide to when to look again. We do not move dates forward.</p>' +
+        ? '<div class="card" style="margin-top:22px"><p class="label">RUNS EVERY YEAR, NEXT ROUND NOT OPEN YET (' + recurringSoon.length + ')</p>' +
+          '<p class="small muted" style="margin-top:8px;max-width:66ch">The funder hasn\u2019t published the next date yet. The date below is when it closed last time. Use it to guess when to look again. We don\u2019t change the funder\u2019s dates.</p>' +
           '<ul style="margin:12px 0 0;padding-left:18px">' +
           recurringSoon.slice(0, 25).map(function (r) {
             return '<li class="small"><a href="#/scholarships/' + esc(r.slug) + '">' + esc(r.name) + '</a>' +
@@ -1753,50 +1854,51 @@
 
       '<section class="bucket" style="margin-top:30px"><div class="bucket-head b1"><div class="spread">' +
         '<h2>Open now</h2><p class="data">' + openNow.length + '</p></div></div>' +
-        '<p class="muted small" style="margin-top:6px;max-width:66ch">Every award in this set that is still accepting applications, soonest deadline first. Awards with no published closing date sit at the end. Those are usually rolling.</p>' +
+        '<p class="muted small" style="margin-top:6px;max-width:66ch">Scholarships in this list that still take applications. Soonest deadline first. Ones with no closing date are at the end. These often take applications all year, but check the funder\u2019s page.</p>' +
         (openNow.length
-          ? '<div style="overflow-x:auto;margin-top:14px"><table><thead><tr><th>Closes</th><th>Award</th><th>Funder</th><th class="num">In</th></tr></thead><tbody>' +
+          ? '<div style="overflow-x:auto;margin-top:14px"><table><thead><tr><th>Closes</th><th>Scholarship</th><th>Funder</th><th class="num">Days left</th></tr></thead><tbody>' +
             openNow.slice(0, 200).map(function (r) {
-              var d = r.deadline_date ? daysUntil(r.deadline_date) : null;
+              var nx = nextDeadline(r), d = nx ? daysUntil(nx) : null;
               return '<tr><td class="mono small" style="width:130px">' +
-                (r.deadline_date ? esc(fmtDate(r.deadline_date)) : '<span class="dim">rolling</span>') + '</td>' +
+                (nx ? esc(fmtDate(nx)) : '<span class="dim">no date</span>') + '</td>' +
                 '<td><a href="#/scholarships/' + esc(r.slug) + '">' + esc(r.name) + '</a></td>' +
                 '<td class="small dim">' + esc(r.funder_name || '') + '</td>' +
-                '<td class="num small">' + (d === null ? '\u2014' : d + ' days') + '</td></tr>';
+                '<td class="num small">' + (d === null ? '\u2014' : d === 0 ? 'today' : d) + '</td></tr>';
             }).join('') + '</tbody></table></div>' +
-            (openNow.length > 200 ? '<p class="small dim" style="margin-top:10px">Showing the first 200 of ' + openNow.length + '. Narrow the set with your profile or use <a href="#/explore/deadlines">deadlines by month</a>.</p>' : '')
-          : '<p class="null">Nothing in this set is currently open.</p>') +
+            (openNow.length > 200 ? '<p class="small dim" style="margin-top:10px">Showing the first 200 of ' + openNow.length + '. Use \u201cMy matches\u201d or <a href="#/explore/deadlines">deadlines by month</a> to see fewer.</p>' : '')
+          : '<p class="null">Nothing in this list is open right now.</p>') +
       '</section>' +
 
       '<div class="row noprint" style="margin-top:24px">' +
-        '<button class="btn btn-primary" id="ics">Download .ics</button>' +
-        '<button class="btn" onclick="window.print()">Print / save as PDF</button>' +
-        '<button class="btn btn-sm" id="clearList">Clear saved list</button>' +
+        '<button class="btn btn-primary" id="ics">Add my saved deadlines to my calendar (.ics)</button>' +
+        '<button class="btn" id="printPage">Print or save as PDF</button>' +
+        '<button class="btn btn-sm" id="clearList">Clear my saved list</button>' +
       '</div></div>';
   }
 
   function methodologyPage() {
-    var open = ALL.filter(function (r) { return r.status === 'open'; }).length;
+    var open = ALL.filter(isOpenNow).length;
     var withDl = ALL.filter(function (r) { return !!r.deadline_date; }).length;
     var stale = ALL.filter(function (r) { var d = r.last_verified_at ? daysSince(r.last_verified_at) : null; return d !== null && d > STALE_DAYS; }).length;
-    return '<div class="wrap-narrow section"><p class="eyebrow">METHODOLOGY</p><h1 style="margin-top:10px">How we check every award</h1>' +
+    return '<div class="wrap-narrow section"><p class="eyebrow">HOW IT WORKS</p><h1 style="margin-top:10px">How we check each scholarship</h1>' +
       '<div class="stack" style="margin-top:22px">' +
-        '<p class="muted">Every entry is read from an official funder, government or university page. We never copy from scholarship listing sites, if we cannot find the funder\u2019s own page, the award does not go in.</p>' +
-        '<p class="muted">Every entry shows you the page it came from, quotes the funder\u2019s own wording for each rule, and tells you when we last checked it. Anything we cannot show a source for does not go in.</p>' +
-        '<p class="muted">Where a funder has not published something, the field is null and the page says <em>NOT PUBLISHED</em>. Nulls are never filled from general knowledge, and amounts keep the funder’s original currency and wording.</p>' +
-        '<p class="muted">Financial need is the clearest case. Where a funder publishes an income cap as a figure, we compare it with yours. Where they simply ask you to demonstrate need, we mark the award need-based and quote what they said, rather than deciding on your behalf.</p>' +
+        '<p class="muted">We read every scholarship on the funder\u2019s own website: a government, a foundation or a university. We never copy from other scholarship websites. If we can\u2019t find the funder\u2019s own page, we leave the scholarship out.</p>' +
+        '<p class="muted">For each one we show the page we used, the funder\u2019s exact words for each rule, and the date we last checked it.</p>' +
+        '<p class="muted">If a funder doesn\u2019t say something, we write \u201cnot given\u201d. We never fill the gap with a guess. Amounts stay in the funder\u2019s own currency and words.</p>' +
+        '<p class="muted">Money is a good example. If a funder gives an income limit as a number, we compare it with yours, but only when it is in the same currency. If they just ask you to show you need money, we mark the scholarship \u201cbased on need\u201d and show their words. We don\u2019t decide for you.</p>' +
+        '<p class="muted">Grades work the same way. We only compare your grade when the funder uses the same scale as you, for example out of 10. If not, we ask you to check it yourself.</p>' +
       '</div>' +
-      '<h2 style="margin-top:36px">Coverage, stated honestly</h2>' +
-      '<div class="grid grid-2" style="margin-top:16px">' + statTile(ALL.length, 'records') + statTile(open, 'currently open') +
-      statTile(withDl, 'with a published deadline') + statTile(stale, 'not re-verified in 90 days') + '</div>' +
-      '<p class="small dim" style="margin-top:14px">Counted from the live database each time this page loads.</p>' +
-      '<h2 style="margin-top:36px">The four buckets</h2><div style="margin-top:14px">' +
-      Object.keys(BUCKET_META).map(function (k) {
+      '<h2 style="margin-top:36px">Our numbers</h2>' +
+      '<div class="grid grid-2" style="margin-top:16px">' + statTile(ALL.length, 'scholarships we have checked') + statTile(open, 'open now') +
+      statTile(withDl, 'with a deadline date') + statTile(stale, 'not checked again in 90 days') + '</div>' +
+      '<p class="small dim" style="margin-top:14px">We count these fresh each time you open this page. They include university scholarships' + (universitiesLoaded ? '' : ' (still loading)') + '.</p>' +
+      '<h2 style="margin-top:36px">What your results mean</h2><div style="margin-top:14px">' +
+      BUCKET_ORDER.map(function (k) {
         return '<div class="card card-tight" style="margin-top:10px"><p class="label">' + esc(BUCKET_META[k].title) + '</p>' +
           '<p class="small muted" style="margin-top:6px">' + esc(BUCKET_META[k].blurb) + '</p></div>';
       }).join('') + '</div>' +
-      '<h2 style="margin-top:36px">Ranking</h2>' +
-      '<p class="muted" style="margin-top:12px">Within each group, awards are ordered by how much they cover, how closely they match your profile, how competitive they are, and how soon they close. Every result card says in plain words why it sits where it does.</p></div>';
+      '<h2 style="margin-top:36px">How we sort results</h2>' +
+      '<p class="muted" style="margin-top:12px">In each group, scholarships come first when they pay more, fit your answers better, have more places, and close sooner. Each result says in plain words why it is where it is.</p></div>';
   }
 
   // --------------------------------------------------------------------- CTA
@@ -1804,19 +1906,19 @@
     var has = !!(p && p.nationality);
     return '<section class="card noprint" style="margin-top:46px;border-color:var(--hairline-strong)">' +
       '<p class="eyebrow">INVOLVE</p>' +
-      '<h2 style="margin-top:10px;max-width:24ch">A shortlist is not an application.</h2>' +
-      '<p class="muted" style="margin-top:12px;max-width:62ch">The buckets tell you what you qualify for. They cannot tell you whether your CV, essays and references will survive a selection panel, and that is where funded places are won and lost.</p>' +
+      '<h2 style="margin-top:10px;max-width:24ch">A list of scholarships is not an application.</h2>' +
+      '<p class="muted" style="margin-top:12px;max-width:62ch">Your results show what you can apply for. They can\u2019t tell you if your CV, essays and references are strong enough. That is where scholarships are won or lost.</p>' +
       '<div class="grid grid-2" style="margin-top:18px">' +
-        '<div class="card card-tight"><p class="label">CV AND RESUME</p><p class="small muted" style="margin-top:6px">' + esc(V.HELP_COPY.resume.line) + '</p>' +
+        '<div class="card card-tight"><p class="label">YOUR CV</p><p class="small muted" style="margin-top:6px">' + esc(V.HELP_COPY.resume.line) + '</p>' +
           '<p class="small" style="margin-top:8px"><a href="' + esc(V.HELP_COPY.resume.url) + '" target="_blank" rel="noreferrer">involveresume.com</a></p></div>' +
         '<div class="card card-tight"><p class="label">ESSAYS, LETTERS AND INTERVIEWS</p><p class="small muted" style="margin-top:6px">' + esc(V.HELP_COPY.consulting.line) + '</p>' +
           '<p class="small" style="margin-top:8px"><a href="' + esc(V.HELP_COPY.consulting.url) + '" target="_blank" rel="noreferrer">involve-consulting.com</a></p></div>' +
       '</div>' +
       (has ? '<label class="row" style="margin-top:18px;align-items:flex-start;gap:10px">' +
         '<input type="checkbox" id="consent" style="width:auto;margin-top:4px">' +
-        '<span class="small">Send my intake profile to Involve Consulting, including anything I wrote in "any other status", so the review starts from real detail. Unticked, the link opens with nothing attached.</span></label>' : '') +
+        '<span class="small">Send my answers to Involve Consulting, including what I wrote under \u201canything else\u201d, so the review starts with my details. If you leave this unticked, nothing is sent.</span></label>' : '') +
       '<div class="row" style="margin-top:16px"><button class="btn btn-primary" id="cta">Get a free profile review</button></div>' +
-      '<p class="small dim" style="margin-top:12px">Browsing, matching and every record on this site are free and always will be. This is public information.</p></section>';
+      '<p class="small dim" style="margin-top:12px">Searching and matching on this site are free, and always will be.</p></section>';
   }
 
   // -------------------------------------------------------------------- bind
@@ -1868,12 +1970,14 @@
     var form = el('intake-form'); if (form) form.addEventListener('submit', onSubmit);
     var ics = el('ics'); if (ics) ics.addEventListener('click', downloadIcs);
     var cl = el('clearList'); if (cl) cl.addEventListener('click', function () { saveShortlist([]); render(); });
+    var pr = el('printPage'); if (pr) pr.addEventListener('click', function () { window.print(); });
     var ca = el('clearAll'); if (ca) ca.addEventListener('click', function () {
       try { window.localStorage.removeItem(PROFILE_KEY); window.localStorage.removeItem(SHORTLIST_KEY); } catch (e) {}
       go('/');
     });
     var cta = el('cta'); if (cta) cta.addEventListener('click', function () {
-      var consent = el('consent'), base = V.HELP_COPY.consulting.url + '/contact';
+      // Same contact page every other button on this site uses.
+      var consent = el('consent'), base = 'https://involve-consulting.com/contact-us/';
       if (consent && consent.checked) {
         var p = loadProfile() || {}, q = ['source=scholarships'];
         if (p.nationality) q.push('nationality=' + encodeURIComponent(cname(p.nationality)));
@@ -1923,20 +2027,36 @@
     var ageOk = age === null || (isFinite(age) && age >= 14 && age <= 99);
     el('e-age').hidden = ageOk; if (!ageOk) { bad = true; age = null; }
 
+    // A grade without its scale used to be dropped without a word, so every
+    // grade rule then said "you didn't tell us your grades".
     var gv = el('f-gpa').value.trim(), gs = el('f-gpascale').value.trim();
-    var gpa = null, gpaOk = true;
+    var gpa = null, gpaOk = true, scaleOk = true;
+    if (gv !== '' && gs === '') scaleOk = false;
     if (gv !== '' && gs !== '') {
       var a = Number(gv), b = Number(gs);
       gpaOk = isFinite(a) && isFinite(b) && b > 0 && a <= b && a >= 0;
       if (gpaOk) gpa = { value: a, scale: b };
     }
     el('e-gpa').hidden = gpaOk; if (!gpaOk) bad = true;
+    el('e-gpascale').hidden = scaleOk; if (!scaleOk) bad = true;
 
-    if (bad) { el('e-nat').scrollIntoView({ block: 'center' }); return; }
+    var workRaw = el('f-work').value.trim();
+    var workOk = workRaw === '' || (isFinite(Number(workRaw)) && Number(workRaw) >= 0 && Number(workRaw) <= 60);
+    el('e-work').hidden = workOk; if (!workOk) bad = true;
+
+    var incomeRaw = el('f-income').value.trim();
+    var incomeOk = incomeRaw === '' || (isFinite(Number(incomeRaw)) && Number(incomeRaw) >= 0);
+    el('e-income').hidden = incomeOk; if (!incomeOk) bad = true;
+    var curOk = incomeRaw === '' || !incomeOk || !!el('f-cur').value;
+    el('e-cur').hidden = curOk; if (!curOk) bad = true;
+
+    if (bad) {
+      var firstErr = document.querySelector('#intake-form .err:not([hidden])');
+      (firstErr || el('e-nat')).scrollIntoView({ block: 'center' });
+      return;
+    }
 
     var course = el('f-course').value.trim();
-    var incomeRaw = el('f-income').value.trim();
-    var workRaw = el('f-work').value.trim();
     var yearRaw = el('f-year').value;
 
     saveProfile(sanitizeProfile({

@@ -1,6 +1,9 @@
 /* Involve Scholarships — matching engine.
- * Generated from packages/core/src by tools/build-core.mjs. Do not edit here.
- * Source of truth is the TypeScript; regenerate after any change to it.
+ * Generated from packages/core/src by tools/build-core.mjs.
+ * NOTE (QA pass, Sept 2026): the comparability, grade-scale, currency and
+ * plain-language changes below were made directly in this file because the
+ * TypeScript source is not in this repo. Port them to packages/core/src
+ * before the next regeneration, or they will be lost.
  */
 (function (global) {
 'use strict';
@@ -842,15 +845,9 @@ function resolveProfileValue(
   }
 }
 
-/** "age_max lte 35" — compact quoted form of the rule. */
+/** "age_max lte 35" — compact machine form of the rule, for logs only. */
 function formatRule(criterion           )         {
   return `${criterion.attribute} ${criterion.operator} ${JSON.stringify(criterion.value)}`;
-}
-
-function withSnippet(base        , criterion           )         {
-  return criterion.source_snippet
-    ? `${base} — official page: "${criterion.source_snippet}"`
-    : base;
 }
 
 function isNumeric(value         )                  {
@@ -867,24 +864,94 @@ function stringEquals(a         , b         )          {
   return String(a).toLowerCase() === String(b).toLowerCase();
 }
 
+// ---------------------------------------------------------------------------
+// Comparability. A rule can only fail you when we can really compare it.
+//
+// The register records many rule values as the funder's own prose
+// ("international student", "ADB borrowing member countries", "Demonstrate
+// financial need"). Comparing those as strings against a profile value can
+// never match, so every one of them used to read as a HARD FAIL: an Indian
+// applicant was "not eligible" for awards open to India because the list said
+// "commonwealth eligible low-middle income countries (incl. IN ...)". A value
+// we cannot read is now 'incomparable' -> unknown -> "check this yourself",
+// never a rejection.
+// ---------------------------------------------------------------------------
+
+const CLOSED_VOCAB = {
+  gender: ['female', 'male', 'other'],
+  study_level: ['bachelor', 'masters', 'mba', 'phd', 'postdoc', 'short_course', 'mim', 'emba'],
+  employment_status: ['employed_full_time', 'employed_public_sector', 'employed_ngo', 'self_employed',
+    'student', 'researcher', 'unemployed'],
+  prior_degree_class: ['first', 'upper_second', 'lower_second', 'other', 'in_progress'],
+};
+
+/** Attributes whose rule values are free text: matched loosely, never failed on. */
+const FREE_TEXT_ATTRIBUTES = new Set(['prior_degree_field', 'language_of_instruction']);
+
+function normGender(x         )         {
+  const v = String(x).trim().toLowerCase();
+  if (['female', 'woman', 'women', 'f', 'girl', 'girls'].indexOf(v) >= 0) return 'female';
+  if (['male', 'man', 'men', 'm'].indexOf(v) >= 0) return 'male';
+  return v;
+}
+
+function recognised(attribute                    , item         )          {
+  if (typeof item === 'boolean' || isNumeric(item)) return true;
+  if (typeof item !== 'string') return false;
+  if (COUNTRY_LIST_ATTRIBUTES.has(attribute)) return /^[A-Z]{2}$/.test(item) || isGroupToken(item);
+  if (attribute === 'gender') return CLOSED_VOCAB.gender.indexOf(normGender(item)) >= 0;
+  if (CLOSED_VOCAB[attribute]) return CLOSED_VOCAB[attribute].indexOf(item.toLowerCase()) >= 0;
+  return false;
+}
+
+function looseTextMatch(profileValue         , ruleItems                   )          {
+  const mine = (Array.isArray(profileValue) ? profileValue : [profileValue])
+    .filter((x) => typeof x === 'string' && x.trim() !== '')
+    .map((x) => x.toLowerCase());
+  return ruleItems.some((r) => {
+    const rv = String(r).toLowerCase().trim();
+    if (!rv) return false;
+    return mine.some((m) => m.indexOf(rv) >= 0 || rv.indexOf(m) >= 0 || m.split(/\s+/)[0] === rv.split(/\s+/)[0]);
+  });
+}
+
 function evaluatePresent(
   criterion           ,
   profileValue         ,
 )                                   {
   const { attribute, operator, value } = criterion;
 
+  // Free text (degree subject, language): a loose match is a pass, anything
+  // else is for the applicant to judge. Never a fail.
+  if (FREE_TEXT_ATTRIBUTES.has(attribute)) {
+    if (operator === 'exists') return 'incomparable';
+    const items = Array.isArray(value) ? value : [value];
+    if (!items.every((v) => typeof v === 'string')) return 'incomparable';
+    const hit = looseTextMatch(profileValue, items);
+    if (operator === 'in' || operator === 'eq') return hit ? 'satisfied' : 'incomparable';
+    return 'incomparable';
+  }
+
   switch (operator) {
     case 'exists':
-      // The resolver already established the field is present.
+      // "exists" with a prose value means "the funder has a rule about this,
+      // written in words". Having the field is not the same as meeting it.
       if (typeof profileValue === 'boolean') return profileValue ? 'satisfied' : 'failed';
-      return 'satisfied';
+      if (value === true || value == null) return 'satisfied';
+      return 'incomparable';
 
     case 'eq':
       if (typeof value === 'boolean' || typeof profileValue === 'boolean') {
+        if (typeof value !== 'boolean' || typeof profileValue !== 'boolean') return 'incomparable';
         return profileValue === value ? 'satisfied' : 'failed';
       }
       if (isNumeric(profileValue) && isNumeric(value)) {
         return profileValue === value ? 'satisfied' : 'failed';
+      }
+      if (!recognised(attribute, value)) return 'incomparable';
+      if (attribute === 'gender') return normGender(profileValue) === normGender(value) ? 'satisfied' : 'failed';
+      if (COUNTRY_LIST_ATTRIBUTES.has(attribute) && typeof profileValue === 'string') {
+        return nationalityListIncludes([value], profileValue) ? 'satisfied' : 'failed';
       }
       return stringEquals(profileValue, value) ? 'satisfied' : 'failed';
 
@@ -909,24 +976,21 @@ function evaluatePresent(
       const list = asStringArray(value);
       if (!list) return 'incomparable';
       // 'any' token means unrestricted → 'in' always satisfied, 'not_in' never satisfied.
+      if (list.indexOf('any') >= 0) return operator === 'in' ? 'satisfied' : 'failed';
+      const known = list.filter((v) => recognised(attribute, v));
+      const unreadable = list.length - known.length;
       let member         ;
-      if (list.includes('any')) {
-        member = true;
-      } else if (COUNTRY_LIST_ATTRIBUTES.has(attribute)) {
-        member =
-          typeof profileValue === 'string' && nationalityListIncludes(list, profileValue);
+      if (COUNTRY_LIST_ATTRIBUTES.has(attribute)) {
+        member = typeof profileValue === 'string' && nationalityListIncludes(known, profileValue);
+      } else if (attribute === 'gender') {
+        member = known.some((lv) => normGender(lv) === normGender(profileValue));
       } else if (Array.isArray(profileValue)) {
-        member = profileValue.some((pv) => list.some((lv) => stringEquals(lv, pv)));
+        member = profileValue.some((pv) => known.some((lv) => stringEquals(lv, pv)));
       } else {
-        member = list.some((lv) => stringEquals(lv, profileValue));
+        member = known.some((lv) => stringEquals(lv, profileValue));
       }
-      return operator === 'in'
-        ? member
-          ? 'satisfied'
-          : 'failed'
-        : member
-          ? 'failed'
-          : 'satisfied';
+      if (operator === 'in') return member ? 'satisfied' : unreadable ? 'incomparable' : 'failed';
+      return member ? 'failed' : unreadable ? 'incomparable' : 'satisfied';
     }
 
     case 'between': {
@@ -936,56 +1000,266 @@ function evaluatePresent(
       return profileValue >= min && profileValue <= max ? 'satisfied' : 'failed';
     }
   }
+  return 'incomparable';
+}
+
+// ---------------------------------------------------------------------------
+// Grades and money need units, not just numbers.
+//
+// gpa_min values in the register are on many scales: 3.5 (out of 4), 60
+// (percent), 7.5 (out of 10), 5 (out of 7), and 2.5 on the German scale where
+// LOWER is better. The engine used to compare the raw numbers, so an Indian
+// CGPA of 8.1/10 "failed" a 60% rule and "passed" a 3.7/4 rule. We now only
+// compare when the rule's scale is known and matches the scale you gave.
+// Income caps are the same problem with currency: a cap of 800,000 rupees and
+// one of 95,000 dollars cannot both be compared with one number.
+// ---------------------------------------------------------------------------
+
+const PLAUSIBLE_SCALES = [3, 4, 4.3, 4.33, 4.5, 5, 6, 7, 9, 10, 20, 100];
+
+function gpaRuleScale(c           )                {
+  const v = Array.isArray(c.value) ? c.value[c.value.length - 1] : c.value;
+  if (!isNumeric(v)) return null;
+  const text = String(c.source_snippet || '');
+  const found           = [];
+  const patterns = [
+    /(?:out of|on an?|scale of|scale:|escala de [\d.,]+ a|escala 0\s*-\s*)\s*(\d{1,3}(?:[.,]\d{1,2})?)/gi,
+    /\d\s*\/\s*(\d{1,3}(?:[.,]\d{1,2})?)/g,
+    /(\d{1,3}(?:[.,]\d{1,2})?)\s*-?\s*point/gi,
+    /(\d{1,2})\s*=\s*max/gi,
+  ];
+  for (const re of patterns) {
+    let m;
+    re.lastIndex = 0;
+    while ((m = re.exec(text))) {
+      const n = Number(String(m[1]).replace(',', '.'));
+      if (PLAUSIBLE_SCALES.indexOf(n) >= 0 && n >= v) found.push(n);
+    }
+  }
+  if (v > 10 && /%|percent|per cent/i.test(text)) found.push(100);
+  if (found.length) return Math.min(...found);
+  return v > 10 && v <= 100 ? 100 : null;
+}
+
+function incomeRuleCurrency(c           )                {
+  const t = String(c.source_snippet || '') + ' ' + String(c.value);
+  if (/₹|\bRs\.?\s?\d|\blakhs?\b|\bINR\b/i.test(t)) return 'INR';
+  if (/\byen\b|¥|\bJPY\b/i.test(t)) return 'JPY';
+  if (/€|\bEUR\b|\beuros?\b/i.test(t)) return 'EUR';
+  if (/£|\bGBP\b/.test(t)) return 'GBP';
+  if (/\bA\$|\bAUD\b/.test(t)) return 'AUD';
+  if (/\bC\$|\bCAD\b/.test(t)) return 'CAD';
+  if (/S\/\s?\d/.test(t)) return 'PEN';
+  if (/\bR\s?\d{2,3}[, ]?\d{3}/.test(t)) return 'ZAR';
+  if (/\$|\bUSD\b/.test(t)) return 'USD';
+  return null;
+}
+
+/** A cap on monthly pay or on the student's own earnings is not a household-income cap. */
+function incomeRuleNotHousehold(c           )          {
+  return /month|mensual|monatlich|per mese|par mois|own income|received by the candidate|Nebenverdienst|paid employment/i
+    .test(String(c.source_snippet || ''));
+}
+
+// ---------------------------------------------------------------------------
+// Plain-language wording. Everything a visitor reads about a rule comes from
+// here, so it is written for someone reading English as a second language.
+// Country codes are left as codes; the app turns them into names.
+// ---------------------------------------------------------------------------
+
+const FIELD_WORDS = {
+  age_max: 'your age', age_min: 'your age', gpa_min: 'your grades', gmat_min: 'your GMAT score',
+  gre_min: 'your GRE score', ielts_min: 'your IELTS score', toefl_min: 'your TOEFL score',
+  work_experience_years_min: 'your years of work experience', work_experience_years_max: 'your years of work experience',
+  gender: 'your gender', nationality: 'your nationality', residency: 'the country you live in',
+  income_max: 'your family income and its currency', first_generation: 'if you are the first in your family at university',
+  disability: 'if you have a disability', refugee_status: 'if you are a refugee', prior_degree_field: 'the subject of your last degree',
+  prior_degree_class: 'your degree result', employment_status: 'your work situation',
+  must_return_home: 'if you will go home after your studies', must_not_hold_other_award: 'if you already hold another scholarship',
+  admission_required: 'if you have a university offer', study_level: 'your study level',
+  language_of_instruction: 'the languages you can prove', enrolled_full_time: 'if you will study full-time',
+};
+
+const LEVEL_WORDS = { bachelor: 'Bachelor’s', masters: 'Master’s', mba: 'MBA', phd: 'PhD', postdoc: 'Postdoc',
+  short_course: 'Short course', mim: 'Master’s in Management', emba: 'Executive MBA' };
+
+function listText(v         )         {
+  if (Array.isArray(v)) return v.map((x) => LEVEL_WORDS[x] || String(x)).join(', ');
+  if (v === true) return 'yes';
+  if (v === false) return 'no';
+  if (v == null) return '';
+  if (typeof v === 'object') return v.note ? String(v.note) : JSON.stringify(v);
+  return String(v);
+}
+
+function said(label        , v         )         {
+  const t = listText(v);
+  return t && t !== 'yes' ? `${label}: ${t}` : label;
+}
+
+/** One rule, in plain words. */
+function plainRule(c           )         {
+  const v = c.value, op = c.operator, num = isNumeric(v);
+  switch (c.attribute) {
+    case 'age_max':
+      if (num) return op === 'lt' ? `You must be younger than ${v}` : `You must be ${v} or younger`;
+      return said('Age limit', v);
+    case 'age_min':
+      if (num) return op === 'gt' ? `You must be older than ${v}` : `You must be at least ${v}`;
+      return said('Minimum age', v);
+    case 'gpa_min': {
+      if (op === 'between' && Array.isArray(v)) return `Your grades must be between ${v[0]} and ${v[1]}`;
+      if (num && (op === 'gte' || op === 'gt')) {
+        const sc = gpaRuleScale(c);
+        return `Your grades must be at least ${v}${sc ? (sc === 100 ? '%' : ' out of ' + sc) : ''}`;
+      }
+      if (num && (op === 'lte' || op === 'lt')) return `Your grade must be ${v} or better (on a scale where lower is better)`;
+      return said('Grades the funder looks for', v);
+    }
+    case 'gmat_min': case 'gre_min': case 'ielts_min': case 'toefl_min': {
+      const t = c.attribute.replace('_min', '').toUpperCase();
+      return num ? `${t} score of at least ${v}` : said(`${t} score needed`, v);
+    }
+    case 'work_experience_years_min':
+      if (op === 'between' && Array.isArray(v)) return `Between ${v[0]} and ${v[1]} years of experience`;
+      return num ? `At least ${v} year${v === 1 ? '' : 's'} of work experience` : said('Work experience needed', v);
+    case 'work_experience_years_max':
+      return num ? `No more than ${v} years of experience` : said('Experience limit', v);
+    case 'gender':
+      return normGender(Array.isArray(v) ? v[0] : v) === 'female' ? 'Only for women' : said('Gender', v);
+    case 'nationality':
+      if ((Array.isArray(v) && v.indexOf('any') >= 0) || v === 'any') return 'Open to all nationalities';
+      if (op === 'in' || op === 'eq') return `Open to citizens of: ${listText(v)}`;
+      if (op === 'not_in') return `Not open to citizens of: ${listText(v)}`;
+      return said('Nationality', v);
+    case 'residency':
+      if (op === 'in' || (op === 'eq' && recognised('residency', v))) return `You must live in: ${listText(v)}`;
+      if (op === 'not_in') return `Not open if you live in: ${listText(v)}`;
+      return said('Where you live', v);
+    case 'income_max':
+      if (num) {
+        const cur = incomeRuleCurrency(c);
+        return `Income must be ${cur ? cur + ' ' : ''}${Number(v).toLocaleString('en')} or less`;
+      }
+      return said('Money', v);
+    case 'first_generation': return 'For students who are the first in their family to go to university';
+    case 'disability': return 'For students with a disability';
+    case 'refugee_status': return 'For refugees or displaced people';
+    case 'prior_degree_field':
+      return (op === 'not_in' ? 'Your last degree must not be in: ' : 'Your last degree should be in: ') + listText(v);
+    case 'prior_degree_class': return said('Degree result needed', v);
+    case 'employment_status': return op === 'not_in' ? `Not open to: ${listText(v)}` : said('Work situation', v);
+    case 'must_return_home':
+      return v === true ? 'You must go back to your home country after your studies' : said('Going home after your studies', v);
+    case 'must_not_hold_other_award':
+      return v === true ? 'You cannot hold another big scholarship at the same time' : said('Other scholarships', v);
+    case 'admission_required':
+      return v === true ? 'You need a university offer first' : said('University offer', v);
+    case 'study_level':
+      return (op === 'not_in' ? 'Not for: ' : 'For: ') + listText(v);
+    case 'language_of_instruction': return said('Language needed', v);
+    case 'enrolled_full_time':
+      return v === true ? 'You must study full-time' : said('Study mode', v);
+  }
+  return said(String(c.attribute).replace(/_/g, ' '), v);
+}
+
+function describeProfileValue(attribute                    , value         , profile                  )         {
+  if (attribute === 'gpa_min' && profile.gpa) return `${profile.gpa.value} out of ${profile.gpa.scale}`;
+  if (attribute === 'income_max' && profile.household_income_amount != null) {
+    return `${Number(profile.household_income_amount).toLocaleString('en')}${profile.household_income_currency ? ' ' + profile.household_income_currency : ''}`;
+  }
+  if (attribute === 'study_level' && LEVEL_WORDS[value]) return LEVEL_WORDS[value];
+  if (typeof value === 'string' && value.indexOf('_') > 0) return value.replace(/_/g, ' ');
+  return listText(value);
 }
 
 /**
  * Evaluate one criterion against an applicant profile.
  *
- * - 'satisfied' / 'failed' when the profile carries the field the rule reads.
- * - 'unknown' when the profile lacks the field (never guessed), or when the
- *   rule and profile value are not comparable (e.g. numeric rule vs text band).
+ * - 'satisfied' / 'failed' only when the rule and your answer can really be
+ *   compared (same scale, same currency, a value we can read).
+ * - 'unknown' otherwise. reason_kind says why:
+ *     'missing' — you did not tell us this yet
+ *     'action'  — something you still have to do (get a university offer)
+ *     'unclear' — the funder's rule is in words we cannot check for you
+ * `record` is optional; it lets an MBA applicant pass a "Master's" level rule.
  */
 function evaluateCriterion(
   criterion           ,
   profile                  ,
+  record              ,
 )                      {
+  const rule_text = plainRule(criterion);
+  const field = FIELD_WORDS[criterion.attribute] || String(criterion.attribute).replace(/_/g, ' ');
+  const unknown = (reason_kind        , explanation        ) => ({
+    criterion, status: 'unknown', reason_kind, rule_text, explanation,
+  });
+  const UNCLEAR = 'We can’t check this for you. Read this rule on the funder’s page and decide if it fits you.';
+
+  // You said "not yet" to having a university offer: that is a step still to
+  // take, not a reason you cannot apply.
+  if (criterion.attribute === 'admission_required' && profile.has_admission === false) {
+    return unknown('action', 'You need a university offer before you can get this award.');
+  }
+
+  // "You cannot hold another award (these ones...)": if you hold none, you
+  // meet it whatever the list says.
+  if (criterion.attribute === 'must_not_hold_other_award' && profile.holds_other_award === false &&
+      criterion.value !== false) {
+    return { criterion, status: 'satisfied', reason_kind: null, rule_text,
+      explanation: 'You meet this. You told us you don\u2019t hold another scholarship.' };
+  }
+
   const resolved = resolveProfileValue(criterion.attribute, profile);
-  const rule = formatRule(criterion);
-
   if (!resolved.present) {
-    return {
-      criterion,
-      status: 'unknown',
-      explanation: withSnippet(
-        `Rule "${rule}" cannot be checked: your profile does not state ${resolved.fieldLabel}. Providing it is an action you can take.`,
-        criterion,
-      ),
-    };
+    return unknown('missing', `We can’t check this yet. You didn’t tell us ${field}.`);
   }
 
-  const outcome = evaluatePresent(criterion, resolved.value);
-
-  if (outcome === 'incomparable') {
-    return {
-      criterion,
-      status: 'unknown',
-      explanation: withSnippet(
-        `Rule "${rule}" cannot be compared against your ${resolved.fieldLabel} (${JSON.stringify(resolved.value)}) — verify this rule manually on the official page.`,
-        criterion,
-      ),
-    };
+  if (criterion.attribute === 'gpa_min' && profile.gpa && isNumeric(criterion.value) || 
+      criterion.attribute === 'gpa_min' && profile.gpa && criterion.operator === 'between') {
+    const rs = gpaRuleScale(criterion);
+    if (criterion.operator === 'lte' || criterion.operator === 'lt' || !rs || Math.abs(rs - profile.gpa.scale) > 0.01) {
+      return unknown('unclear', (criterion.operator === 'lte' || criterion.operator === 'lt')
+        ? 'This rule uses a grading scale where a lower number is better. Check how the funder converts your grades.'
+        : rs
+        ? `This rule uses grades out of ${rs}. You gave yours out of ${profile.gpa.scale}. Check how the funder converts grades.`
+        : 'We can’t tell which grading scale this rule uses. Check it on the funder’s page.');
+    }
   }
 
-  const profileDesc = `your ${resolved.fieldLabel} is ${JSON.stringify(resolved.value)}`;
+  if (criterion.attribute === 'income_max' && isNumeric(criterion.value)) {
+    const cur = incomeRuleCurrency(criterion);
+    if (incomeRuleNotHousehold(criterion)) {
+      return unknown('unclear', 'This limit is about monthly pay or your own earnings, not yearly family income. Check it on the funder’s page.');
+    }
+    if (!cur || !profile.household_income_currency || cur !== profile.household_income_currency) {
+      return unknown('unclear', cur
+        ? `This limit is in ${cur}. ${profile.household_income_currency ? 'You gave your income in ' + profile.household_income_currency + '.' : 'You didn’t say which currency your income is in.'} Convert it and check.`
+        : 'The funder doesn’t say which currency this limit is in. Check it on their page.');
+    }
+  }
+
+  let outcome = evaluatePresent(criterion, resolved.value);
+
+  // An MBA is a master's degree unless the funder says MBAs are excluded.
+  if (criterion.attribute === 'study_level' && outcome === 'failed' && (criterion.operator === 'in' || criterion.operator === 'eq') &&
+      record && LEVEL_PARENT[profile.study_level]) {
+    const lv = Array.isArray(criterion.value) ? criterion.value : [criterion.value];
+    if (lv.indexOf(LEVEL_PARENT[profile.study_level]) >= 0 && !excludesMba(record)) outcome = 'satisfied';
+  }
+
+  if (outcome === 'incomparable') return unknown('unclear', UNCLEAR);
+
+  const mine = describeProfileValue(criterion.attribute, resolved.value, profile);
   return {
     criterion,
     status: outcome,
-    explanation: withSnippet(
-      outcome === 'satisfied'
-        ? `Rule "${rule}" satisfied: ${profileDesc}.`
-        : `Rule "${rule}" NOT satisfied: ${profileDesc}.`,
-      criterion,
-    ),
+    reason_kind: null,
+    rule_text,
+    explanation: outcome === 'satisfied'
+      ? `You meet this.${mine ? ' You told us ' + field + ': ' + mine + '.' : ''}`
+      : `You don’t meet this.${mine ? ' You told us ' + field + ': ' + mine + '.' : ''}`,
   };
 }
 
@@ -993,8 +1267,9 @@ function evaluateCriterion(
 function evaluateCriteria(
   criteria                      ,
   profile                  ,
+  record              ,
 )                        {
-  return criteria.map((c) => evaluateCriterion(c, profile));
+  return criteria.map((c) => evaluateCriterion(c, profile, record));
 }
 
 
@@ -1230,20 +1505,33 @@ function levelCovered(s             , level         )          {
   return !excludesMba(s);
 }
 
+function shortList(list          )         {
+  const a = (list || []).filter(Boolean);
+  return a.length > 8 ? a.slice(0, 6).join(', ') + ` and ${a.length - 6} more` : a.join(', ');
+}
+
+/** A nationality list we can read in full: ISO codes and group tokens only. */
+function readableCountryList(list          )          {
+  return (list || []).every((v) => /^[A-Z]{2}$/.test(v) || isGroupToken(v));
+}
+
 function prefilter(profile                  , s             )                {
   if (profile.nationality) {
     const nat = profile.nationality;
     if (published(s.excluded_nationalities) && nationalityListIncludes(s.excluded_nationalities, nat)) {
-      return `Pre-filter: nationality ${nat} is explicitly excluded (excluded_nationalities: [${s.excluded_nationalities.join(', ')}]).`;
+      return `This award is not open to citizens of ${nat}.`;
     }
-    if (published(s.eligible_nationalities) && !nationalityListIncludes(s.eligible_nationalities, nat)) {
-      return `Pre-filter: nationality ${nat} is not in eligible_nationalities [${s.eligible_nationalities.join(', ')}].`;
+    // A list with a word we cannot read ("asia", "africa") might include you,
+    // so it is never used to rule you out. The record page shows the list.
+    if (published(s.eligible_nationalities) && readableCountryList(s.eligible_nationalities) &&
+        !nationalityListIncludes(s.eligible_nationalities, nat)) {
+      return `This award is only for citizens of: ${shortList(s.eligible_nationalities)}.`;
     }
   }
   if (profile.study_level && published(s.study_levels) && !levelCovered(s, profile.study_level)) {
-    return `Pre-filter: study level "${profile.study_level}" is not in study_levels [${s.study_levels.join(', ')}]` +
-      (LEVEL_PARENT[profile.study_level] && s.study_levels.includes(LEVEL_PARENT[profile.study_level])
-        ? ', and the funder excludes MBA programmes in its own wording.' : '.');
+    const mbaExcluded = LEVEL_PARENT[profile.study_level] && s.study_levels.includes(LEVEL_PARENT[profile.study_level]);
+    return `This award is not for ${LEVEL_WORDS[profile.study_level] || profile.study_level} study. It is for: ${listText(s.study_levels)}.` +
+      (mbaExcluded ? ' The funder says MBA courses are not included.' : '');
   }
   if (
     profile.destinations &&
@@ -1252,7 +1540,7 @@ function prefilter(profile                  , s             )                {
     !s.destination_countries.includes('any') &&
     !overlap(s.destination_countries, profile.destinations)
   ) {
-    return `Pre-filter: none of your destinations [${profile.destinations.join(', ')}] is in destination_countries [${s.destination_countries.join(', ')}].`;
+    return `This award is not for study in the countries you picked. It is for study in: ${shortList(s.destination_countries)}.`;
   }
   return null;
 }
@@ -1270,35 +1558,32 @@ const TEST_SCORE_ATTRIBUTES                                  = new Set([
 
 const LEAD_TIME                                         = {
   missing_test_score:
-    'Book the test now — allow roughly 1–3 months for preparation, test availability and official score reporting before the deadline.',
+    'Book the test soon. Getting your score can take 1 to 3 months.',
   admission:
-    'Secure university admission first — allow roughly 2–6 months for the admission application and decision cycle.',
+    'Apply to the university first. An offer can take 2 to 6 months.',
   nomination:
-    'Secure a nomination — allow roughly 1–3 months; contact the nominating body (university / government / embassy) early.',
+    'Ask early. Getting nominated can take 1 to 3 months.',
   missing_profile_field:
-    'Provide this information or evidence — usually resolvable within days once gathered.',
+    'Add this to your profile. It takes a minute.',
+  check_rule:
+    'Read this rule on the funder’s page and decide if it fits you.',
 };
 
 function actionForUnknownCriterion(ev                     )                 {
   const attr = ev.criterion.attribute;
+  if (attr === 'admission_required' && ev.reason_kind !== 'unclear') {
+    return { kind: 'admission', label: 'Get a university offer first', lead_time_note: LEAD_TIME.admission };
+  }
+  if (ev.reason_kind === 'unclear') {
+    return { kind: 'check_rule', label: `Check this rule yourself: ${ev.rule_text}`, lead_time_note: LEAD_TIME.check_rule };
+  }
   if (TEST_SCORE_ATTRIBUTES.has(attr)) {
     const test = attr.replace('_min', '').toUpperCase();
-    return {
-      kind: 'missing_test_score',
-      label: `Take the ${test} and report your score`,
-      lead_time_note: LEAD_TIME.missing_test_score,
-    };
-  }
-  if (attr === 'admission_required') {
-    return {
-      kind: 'admission',
-      label: 'Obtain university admission',
-      lead_time_note: LEAD_TIME.admission,
-    };
+    return { kind: 'missing_test_score', label: `Take the ${test} and add your score`, lead_time_note: LEAD_TIME.missing_test_score };
   }
   return {
     kind: 'missing_profile_field',
-    label: `Provide: ${attr.replace(/_/g, ' ')}`,
+    label: `Tell us ${FIELD_WORDS[attr] || attr.replace(/_/g, ' ')}`,
     lead_time_note: LEAD_TIME.missing_profile_field,
   };
 }
@@ -1351,7 +1636,7 @@ function matchScholarship(
     };
   }
 
-  const evaluations = evaluateCriteria(scholarship.criteria, profile);
+  const evaluations = evaluateCriteria(scholarship.criteria || [], profile, scholarship);
 
   // 2. hard failures → not_eligible (rule quoted verbatim)
   const failingRules = evaluations.filter((e) => e.criterion.is_hard && e.status === 'failed');
@@ -1363,9 +1648,8 @@ function matchScholarship(
       fit_score,
       factors,
       blocking_actions: [],
-      reason: `${failingRules.length} hard rule(s) failed: ${failingRules
-        .map((e) => formatRule(e.criterion))
-        .join('; ')}`,
+      reason: (failingRules.length === 1 ? 'You don\u2019t meet this rule: ' : 'You don\u2019t meet these rules: ') +
+        failingRules.map((e) => e.rule_text).join('; ') + '.',
       failing_rules: failingRules,
       prefilter_passed: true,
     };
@@ -1387,12 +1671,12 @@ function matchScholarship(
   if (
     scholarship.requires_university_admission_first &&
     profile.has_admission !== true &&
-    !seen.has('Obtain university admission')
+    !seen.has('Get a university offer first')
   ) {
-    seen.add('Obtain university admission');
+    seen.add('Get a university offer first');
     blockingActions.push({
       kind: 'admission',
-      label: 'Obtain university admission first',
+      label: 'Get a university offer first',
       lead_time_note: LEAD_TIME.admission,
     });
   }
@@ -1401,8 +1685,8 @@ function matchScholarship(
     blockingActions.push({
       kind: 'nomination',
       label: scholarship.nomination_note
-        ? `Secure nomination (${scholarship.nomination_note})`
-        : 'Secure a nomination',
+        ? `Get nominated first (${scholarship.nomination_note})`
+        : 'Get nominated first',
       lead_time_note: LEAD_TIME.nomination,
     });
   }
@@ -1431,9 +1715,8 @@ function matchScholarship(
       fit_score,
       factors,
       blocking_actions: [],
-      reason: `You meet the hard rules, but fall short of ${softFailures.length} typical (soft) bar(s): ${softFailures
-        .map((e) => formatRule(e.criterion))
-        .join('; ')}. Success odds are below average — strengthen these areas or treat as a stretch.`,
+      reason: 'You meet the must-have rules, but not what the funder prefers: ' +
+        softFailures.map((e) => e.rule_text).join('; ') + '. You can still apply, but it will be harder.',
       failing_rules: [],
       prefilter_passed: true,
     };
@@ -1464,9 +1747,8 @@ function matchScholarship(
       factors,
       blocking_actions: [],
       reason:
-        'We have not yet recorded this award\u2019s own eligibility rules, so nothing here was ' +
-        'checked against your profile beyond nationality, study level and destination. It is not ' +
-        'a match and it is not a rejection \u2014 read the funder\u2019s page before spending time on it.',
+        'We haven\u2019t read this award\u2019s rules yet. We only checked your nationality, ' +
+        'study level and country. Read the funder\u2019s page before you spend time on it.',
       failing_rules: [],
       prefilter_passed: true,
     };
@@ -1658,7 +1940,7 @@ function toICS(entries                          , now      )         {
     const descParts = [
       e.note ? e.note : null,
       `Record: ${e.slug}`,
-      'Verify on the official page — dates are as last verified, not guaranteed.',
+      'Check the date on the funder\u2019s page. Dates can change.',
     ].filter(Boolean);
     lines.push(`DESCRIPTION:${escapeText(descParts.join(' | '))}`);
     if (e.url) lines.push(`URL:${e.url}`);
@@ -1674,6 +1956,7 @@ function toICS(entries                          , now      )         {
 global.InvolveCore = {
   matchScholarships: typeof matchScholarships === 'function' ? matchScholarships : undefined,
   evaluateCriterion: typeof evaluateCriterion === 'function' ? evaluateCriterion : undefined,
+  plainRule: typeof plainRule === 'function' ? plainRule : undefined,
   buildCalendar: typeof buildCalendar === 'function' ? buildCalendar : undefined,
   toICS: typeof toICS === 'function' ? toICS : undefined,
   assertProvenance: typeof assertProvenance === 'function' ? assertProvenance : undefined,

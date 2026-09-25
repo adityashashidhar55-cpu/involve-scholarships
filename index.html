@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Involve Scholarships, find funding you are actually eligible for</title>
-<meta name="description" content="Search 600+ scholarships for international students, sourced only from official funder, government and university pages. See exactly which awards you qualify for, what each one asks for, and when it closes.">
+<title>Involve Scholarships: find scholarships you can actually get</title>
+<meta name="description" content="Free scholarship search for students going abroad. See which scholarships you qualify for, what each one asks for, and when it closes. Every one is checked on the funder's own website.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -18,23 +18,25 @@
    The Blob is text/plain deliberately. application/json is not a CORS-safelisted
    content type, so it forces a preflight, and sendBeacon cannot do a preflight -
    it fails silently and the visit is never counted. text/plain goes straight
-   through, and the endpoint reads the body regardless of what the header says. */
-(function(){var EP='https://aojnpekquzpwitkyhaai.supabase.co/functions/v1/hit';var SITE=(window.INVOLVE_SITE||'main');function send(ev,extra){try{var b={site:SITE,event:ev,path:(location.pathname||'/').split('?')[0].split('#')[0],referrer:document.referrer||''};if(extra&&extra.tool) b.tool=extra.tool;var s=JSON.stringify(b);if(navigator.sendBeacon){navigator.sendBeacon(EP,new Blob([s],{type:'text/plain'}));} else {fetch(EP,{method:'POST',headers:{'content-type':'application/json'},body:s,keepalive:true}).catch(function(){});}}catch(e){}}window.involveHit=send;if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){send('pageview');});else send('pageview');window.addEventListener('hashchange',function(){send('pageview');});})();
+   through, and the endpoint reads the body regardless of what the header says.
+   Local copies (localhost, file://) send nothing: no fake visits in the counts
+   and no failed-request noise in the console while testing. */
+(function(){var EP='https://aojnpekquzpwitkyhaai.supabase.co/functions/v1/hit';var H=location.hostname||'';if(location.protocol==='file:'||H==='localhost'||H==='[::1]'||/^127\./.test(H)||/^0\.0\.0\.0$/.test(H)){window.involveHit=function(){};return;}var SITE=(window.INVOLVE_SITE||'main');function send(ev,extra){try{var b={site:SITE,event:ev,path:(location.pathname||'/').split('?')[0].split('#')[0],referrer:document.referrer||''};if(extra&&extra.tool) b.tool=extra.tool;var s=JSON.stringify(b);if(navigator.sendBeacon){navigator.sendBeacon(EP,new Blob([s],{type:'text/plain'}));} else {fetch(EP,{method:'POST',headers:{'content-type':'application/json'},body:s,keepalive:true}).catch(function(){});}}catch(e){}}window.involveHit=send;if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){send('pageview');});else send('pageview');window.addEventListener('hashchange',function(){send('pageview');});})();
 </script>
 </head>
 <body>
 <header class="nav noprint">
   <div class="wrap nav-inner">
     <a class="brand" href="#/"><img class="brand-logo" src="https://involve-consulting.com/wp-content/uploads/2025/06/logo.png" alt="Involve" width="500" height="279" onerror="var w=this.parentNode&amp;&amp;this.parentNode.querySelector('.brand-word');if(w)w.textContent='Involve\u00b7Scholarships';this.remove();"><span class="brand-word">Scholarships</span></a>
-    <a class="navlink nav-hide" href="#/results">Results</a>
-    <a class="navlink nav-hide" href="#/explore">Explore</a>
+    <a class="navlink nav-hide" href="#/results">My results</a>
+    <a class="navlink nav-hide" href="#/explore">All scholarships</a>
     <a class="navlink nav-hide" href="#/schools">Universities</a>
     <a class="navlink nav-hide" href="#/directory">Directory</a>
     <a class="navlink nav-hide" href="/d/">Browse A to Z</a>
-    <a class="navlink nav-hide" href="#/calendar">Calendar</a>
-    <a class="navlink nav-hide" href="#/methodology">Methodology</a>
+    <a class="navlink nav-hide" href="#/calendar">Deadlines</a>
+    <a class="navlink nav-hide" href="#/methodology">How it works</a>
     <span class="grow"></span>
-    <a class="btn btn-sm nav-hide" href="#/intake">Match me</a>
+    <a class="btn btn-sm nav-hide" href="#/intake">Check what I qualify for</a>
   </div>
 </header>
 
@@ -43,8 +45,8 @@
 <footer class="foot noprint">
   <div class="wrap">
     <img class="foot-logo" src="https://involve-consulting.com/wp-content/uploads/2025/06/logo.png" alt="Involve" width="500" height="279" onerror="this.remove()"><p class="label" style="margin-top:10px">INVOLVE SCHOLARSHIPS</p>
-    <p class="small muted" style="margin-top:8px;max-width:62ch">Public funding information, free to browse. We record what funders publish and nothing else, we do not invent deadlines or amounts, and we do not take records from aggregator sites. Always confirm on the official page before applying.</p>
-    <p class="small dim" id="refresh-stamp" style="margin-top:12px">Refreshed monthly.</p>
+    <p class="small muted" style="margin-top:8px;max-width:62ch">Free to use. We only show what funders publish. We never make up deadlines or amounts, and we don't copy from other scholarship websites. Always check the funder's own page before you apply.</p>
+    <p class="small dim" id="refresh-stamp" style="margin-top:12px">Updated every month.</p>
     <p class="small dim" style="margin-top:6px">An Involve Consulting project.</p>
   </div>
 </footer>

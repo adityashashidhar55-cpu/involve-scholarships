@@ -3,40 +3,45 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Involve Scholarships, find funding you are actually eligible for</title>
-<meta name="description" content="Search 600+ scholarships for international students, sourced only from official funder, government and university pages. See exactly which awards you qualify for, what each one asks for, and when it closes.">
+<!-- Served for ANY missing path (e.g. /d/XX/old.html). base makes the app's relative data fetches resolve from the site root. -->
+<base href="/">
+<title>Involve Scholarships: find scholarships you can actually get</title>
+<meta name="description" content="Free scholarship search for students going abroad. See which scholarships you qualify for, what each one asks for, and when it closes. Every one is checked on the funder's own website.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./app.css">
+<link rel="stylesheet" href="/app.css">
 </head>
 <body>
 <header class="nav noprint">
   <div class="wrap nav-inner">
-    <a class="brand" href="#/"><img class="brand-logo" src="https://involve-consulting.com/wp-content/uploads/2025/06/logo.png" alt="Involve" width="500" height="279" onerror="var w=this.parentNode&amp;&amp;this.parentNode.querySelector('.brand-word');if(w)w.textContent='Involve\u00b7Scholarships';this.remove();"><span class="brand-word">Scholarships</span></a>
-    <a class="navlink nav-hide" href="#/results">Results</a>
-    <a class="navlink nav-hide" href="#/explore">Explore</a>
-    <a class="navlink nav-hide" href="#/schools">Universities</a>
-    <a class="navlink nav-hide" href="#/directory">Directory</a>
-    <a class="navlink nav-hide" href="#/calendar">Calendar</a>
-    <a class="navlink nav-hide" href="#/methodology">Methodology</a>
+    <a class="brand" href="/#/"><img class="brand-logo" src="https://involve-consulting.com/wp-content/uploads/2025/06/logo.png" alt="Involve" width="500" height="279" onerror="var w=this.parentNode&amp;&amp;this.parentNode.querySelector('.brand-word');if(w)w.textContent='Involve\u00b7Scholarships';this.remove();"><span class="brand-word">Scholarships</span></a>
+    <a class="navlink nav-hide" href="/#/results">My results</a>
+    <a class="navlink nav-hide" href="/#/explore">All scholarships</a>
+    <a class="navlink nav-hide" href="/#/schools">Universities</a>
+    <a class="navlink nav-hide" href="/#/directory">Directory</a>
+    <a class="navlink nav-hide" href="/d/">Browse A to Z</a>
+    <a class="navlink nav-hide" href="/#/calendar">Deadlines</a>
+    <a class="navlink nav-hide" href="/#/methodology">How it works</a>
     <span class="grow"></span>
-    <a class="btn btn-sm nav-hide" href="#intake">Match me</a>
+    <a class="btn btn-sm nav-hide" href="/#/intake">Check what I qualify for</a>
   </div>
 </header>
 
+<div class="wrap" style="margin-top:18px"><p class="banner small" role="status" style="padding:10px 14px">We could not find that page. It may have moved. Here is the scholarship home page instead.</p></div>
 <main id="view"></main>
 
 <footer class="foot noprint">
   <div class="wrap">
     <p class="label">INVOLVE SCHOLARSHIPS</p>
-    <p class="small muted" style="margin-top:8px;max-width:62ch">Public funding information, free to browse. We record what funders publish and nothing else, we do not invent deadlines or amounts, and we do not take records from aggregator sites. Always confirm on the official page before applying.</p>
-    <p class="small dim" style="margin-top:12px">An Involve Consulting project.</p>
+    <p class="small muted" style="margin-top:8px;max-width:62ch">Free to use. We only show what funders publish. We never make up deadlines or amounts, and we don't copy from other scholarship websites. Always check the funder's own page before you apply.</p>
+    <p class="small dim" id="refresh-stamp" style="margin-top:12px">Updated every month.</p>
+    <p class="small dim" style="margin-top:6px">An Involve Consulting project.</p>
   </div>
 </footer>
 
-<script>window.INVOLVE_DATA_V="292-318-2866";</script>
-<script src="./vocab.js"></script>
-<script src="./core.js"></script>
-<script src="./app.js"></script>
+<script>window.INVOLVE_DATA_V="619-318-31214-20260901";</script>
+<script src="/vocab.js"></script>
+<script src="/core.js"></script>
+<script src="/app.js"></script>
 </body></html>
